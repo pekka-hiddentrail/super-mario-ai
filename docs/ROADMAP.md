@@ -59,6 +59,10 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   (2808 / 3674 / 3432 vs 1826 / 1890 / 1991; means 3305 vs 1902). The static higher mutation did **not** hold up
   (2456 / 980 / 847; mean 1428), so its earlier clear was luck. None of the confirmation runs cleared.
   The first adaptive version never triggered because tiny fitness gains reset its stall counter; fixed by `min_improvement`.
+- **Yoshi's Island 1 cleared** by a long adaptive-mutation run (`configs/yi1_adaptive.toml`, population 100, seed 1): first clear at generation 23
+  after about 889,000 emulator frames (about 11 minutes with 12 workers). Each jump in best fitness (gens 8, 14, 23) came right after a
+  boost period. The clearing run takes about 2,240 frames; it happened to pick up 2 coins, 2 big coins and 1 power-up (no collect rewards were set).
+  One seed; best-ever x had sat at 3039 -> 3416 -> 4152 before.
 - PPO vs NEAT on Yoshi's Island 2 (same reward and `collect` inputs): NEAT cleared in 2 generations (roughly 100k frames, estimated);
   PPO cleared at about 270k steps (about 1.1M frames) and only in some evaluation rounds (3 of 20), so NEAT was about 10x more
   frame-efficient there. One seed each.
@@ -72,7 +76,7 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 - PPO sees one frame only (no speed, no memory).
 
 ## Next (in order)
-1. Long run on Yoshi's Island 1 with the adaptive config (`configs/yi1_adaptive.toml`); see where it ends (Banzai Bill + pit near x 3580-3680).
+1. Repeat the long adaptive run on Yoshi's Island 1 with more seeds (the single clear could be luck), then add speed and collect rewards on top.
 2. More seeds for adaptive mutation (5+), tune `stall_generations` and the boost size; try it together with the wider view (mixed results so far).
 3. Speed and ground inputs (X/Y speed, in-air flag) in one observation version (see "Making the agent more intelligent", item 1).
 4. Try the box-hit and big-coin rewards (`collect` configs) and check that the path map shows them being collected.

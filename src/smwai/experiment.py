@@ -26,6 +26,8 @@ def merge(base, over):
 def plan(spec_path, runs_dir="runs"):
     spec = tomllib.loads(Path(spec_path).read_text(encoding="utf-8"))
     base = config.load_raw(spec["base"])
+    if "pop_size" in spec:                  # the spec-wide default; a variant may still override it
+        base["neat"]["pop_size"] = spec["pop_size"]
     out_dir = Path(runs_dir) / "_experiments" / spec["name"]
     runs = []
     for seed in spec.get("seeds", [1]):          # seed-major: a stopped experiment still compares evenly
@@ -36,8 +38,6 @@ def plan(spec_path, runs_dir="runs"):
             raw.setdefault("train", {}).update(
                 seed=seed, generations=spec["generations"], workers=spec.get("workers", 12),
                 runs_dir=runs_dir)
-            if "pop_size" in spec:
-                raw["neat"]["pop_size"] = spec["pop_size"]
             runs.append({"variant": variant["name"], "seed": seed, "raw": raw,
                          "config_path": out_dir / f"{variant['name']}-s{seed}.toml",
                          "run_dir": Path(runs_dir) / raw["name"]})

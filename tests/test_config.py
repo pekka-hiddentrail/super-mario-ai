@@ -42,3 +42,10 @@ def test_collect_mode_has_coin_grid():
     cfg = EnvConfig(inputs="collect")
     assert [n for n, _ in input_layout(cfg)][:4] == ["solid", "enemy", "item", "coin"]
     assert n_inputs(cfg) == 169 * 4 + 3
+
+
+def test_ppo_defaults_and_config():
+    cfg = config.load("configs/ppo_level1.toml")
+    assert cfg.ppo["n_envs"] == 8 and cfg.env.inputs == "collect"
+    assert cfg.ppo["batch_size"] <= cfg.ppo["n_envs"] * cfg.ppo["n_steps"]
+    assert config.load("configs/level1.toml").ppo["total_steps"] == config.PPO_DEFAULTS["total_steps"]

@@ -45,6 +45,8 @@ def compute_replay(run_dir, generation, use_cache=True):
     cache = run_dir / "replay_cache" / f"gen_{generation:04d}.json"
     if use_cache and cache.exists():
         return cache.read_text()
+    if not (run_dir / "neat.cfg").exists():       # PPO run: replay the recorded buttons
+        return _cache(cache, compute_action_replay(run_dir, generation))
     cfg = config.load(run_dir / "config.toml")
     train.use_config(cfg.env)
     neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
@@ -79,6 +81,40 @@ def compute_replay(run_dir, generation, use_cache=True):
         "buttons": BUTTONS, "radius": cfg.env.radius, "watch": watch, "graph": graph,
         "layout": [{"name": n, "kind": k} for n, k in env.layout],
         "steps": steps})
-    cache.parent.mkdir(exist_ok=True)
-    cache.write_text(result)
-    return result
+    return _cache(cache, result)
+
+
+def _cache(path, text):
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(text)
+    return text
+
+
+def compute_action_replay(run_dir, generation):
+    """Replay recorded button masks (PPO runs): game frames and pressed buttons, no network graph."""
+    run_dir = Path(run_dir)
+    rec = json.loads((run_dir / "best" / f"gen_{generation:04d}.json").read_text())
+    cfg = config.load(run_dir / "config.toml")
+    train.use_config(cfg.env)
+    env = train._get_env()
+    obs, info = env.reset()
+    steps, total = [], 0.0
+    for mask in rec["actions"]:
+        action = train._from_mask(mask)
+        steps.append({
+            "frame": _jpeg(env.frame),
+            "grid": "".join(chr(ord("a") + int(v) + 1) for v in obs.ravel()),
+            "act": [], "pressed": [int(a) for a in action],
+            "x": info["x"], "y": info["y"], "reward": round(total, 1)})
+        obs, reward, term, trunc, info = env.step(action)
+        total += reward
+        if term or trunc:
+            break
+    steps.append({"frame": _jpeg(env.frame), "grid": steps[-1]["grid"], "act": [],
+                  "pressed": [0] * len(BUTTONS), "x": info["x"], "y": info["y"],
+                  "reward": round(total, 1)})
+    return json.dumps({
+        "generation": generation, "fitness": total, "max_x": info["max_x"],
+        "cleared": bool(info.get("cleared")), "died": bool(info.get("died")),
+        "buttons": BUTTONS, "radius": cfg.env.radius, "watch": [], "graph": None,
+        "layout": [{"name": n, "kind": k} for n, k in env.layout], "steps": steps})

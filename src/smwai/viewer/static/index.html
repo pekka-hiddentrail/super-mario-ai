@@ -109,6 +109,7 @@ async function load() {
   $('load').disabled = false;
 }
 function layout() {
+  if (!R.graph) { pos = {}; groups = []; return; }       // PPO run: no network graph
   const g = R.graph, n = 2 * R.radius + 1;
   const L = R.layout || [{ name: 'tiles', kind: 'grid' }];
   const nGrids = L.filter(x => x.kind === 'grid').length, multi = nGrids > 1;
@@ -149,6 +150,15 @@ function draw() {
 function drawNet(s) {
   const c = nctx, g = R.graph, n = 2 * R.radius + 1, cell = 15;
   c.clearRect(0, 0, net.width, net.height);
+  if (!g) {                                              // PPO run: show which buttons are pressed
+    c.font = '13px system-ui'; c.fillStyle = css('--muted');
+    c.fillText('PPO run: no evolving network graph. Buttons pressed this step:', 24, 30);
+    R.buttons.forEach((b, i) => {
+      c.fillStyle = s.pressed[i] ? css('--accent') : css('--muted'); c.font = (s.pressed[i] ? 'bold ' : '') + '14px system-ui';
+      c.fillText((s.pressed[i] ? '● ' : '○ ') + b, 24 + (i % 4) * 120, 70 + Math.floor(i / 4) * 30);
+    });
+    return;
+  }
   c.font = '12px system-ui'; c.fillStyle = css('--muted');
   c.fillText(groups.length > 1 ? 'Inputs: tile channels around Mario' : 'Inputs: tiles around Mario', 24, 20);
   c.fillText('Hidden', 380, 24); c.fillText('Buttons', 620, 24);
@@ -217,7 +227,7 @@ $('seek').oninput = e => { idx = +e.target.value; playing = false; $('play').tex
 $('weights').onchange = draw;
 document.addEventListener('keydown', e => { if (e.code === 'Space' && R) { e.preventDefault(); $('play').click(); } });
 net.onmousemove = e => {
-  if (!R) return;
+  if (!R || !R.graph) return;
   const b = net.getBoundingClientRect(), sx = net.width / b.width;
   const mx = (e.clientX - b.left) * sx, my = (e.clientY - b.top) * sx;
   let best = null, bd = 100;

@@ -34,5 +34,5 @@ Status: done = in `main`/branch, next = planned order, later = wanted but not sc
 
 ## Later
 - Multi-level sequences (advance to the next save state on clear).
-- PPO via stable-baselines3 on the same env, same dashboard.
+- ~~PPO via stable-baselines3 on the same env, same dashboard.~~ first version done (`smwai train-ppo`, MLP policy on CPU). Ideas: CNN policy, frame stacking / velocity inputs, live tuning for PPO.
 - Other levels and vertical levels (tile layout differs).

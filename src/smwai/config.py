@@ -76,6 +76,12 @@ NEAT_DEFAULTS = dict(
     survival_threshold=0.2, elitism=2)
 
 
+PPO_DEFAULTS = dict(
+    total_steps=500_000, n_envs=8, n_steps=256, batch_size=512, n_epochs=4, learning_rate=3e-4,
+    gamma=0.99, ent_coef=0.01, clip_range=0.2, reward_scale=0.01, eval_every=20_480,
+    net_arch=[256, 256])
+
+
 @dataclass
 class RunConfig:
     name: str
@@ -86,6 +92,7 @@ class RunConfig:
     runs_dir: str
     neat: dict
     seed: int = None
+    ppo: dict = None
 
     @property
     def n_inputs(self):
@@ -126,4 +133,5 @@ def load(path):
         name=raw.get("name", "run"), env=env,
         generations=train.get("generations", 100), workers=train.get("workers", 4),
         checkpoint_every=train.get("checkpoint_every", 5), runs_dir=train.get("runs_dir", "runs"),
-        neat={**NEAT_DEFAULTS, **raw.get("neat", {})}, seed=train.get("seed"))
+        neat={**NEAT_DEFAULTS, **raw.get("neat", {})}, seed=train.get("seed"),
+        ppo={**PPO_DEFAULTS, **raw.get("ppo", {})})

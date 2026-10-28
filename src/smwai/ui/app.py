@@ -65,12 +65,16 @@ def procs():
     return out
 
 
-def start_training(cfg_path, workers, generations):
+def start_training(cfg_path, workers, generations, algo="neat"):
     PROCS.mkdir(parents=True, exist_ok=True)
     name = Path(cfg_path).stem
     log = PROCS / f"{name}.log"
-    cmd = [sys.executable, "-m", "smwai.cli", "train", "--config", str(cfg_path),
-           "--workers", str(workers), "--generations", str(generations)]
+    if algo == "ppo":      # here `workers` = parallel emulators, `generations` = total training steps
+        cmd = [sys.executable, "-m", "smwai.cli", "train-ppo", "--config", str(cfg_path),
+               "--envs", str(workers), "--steps", str(generations)]
+    else:
+        cmd = [sys.executable, "-m", "smwai.cli", "train", "--config", str(cfg_path),
+               "--workers", str(workers), "--generations", str(generations)]
     p = subprocess.Popen(cmd, cwd=ROOT, stdout=open(log, "w"), stderr=subprocess.STDOUT,
                          start_new_session=True)
     (PROCS / f"{name}.json").write_text(json.dumps(
@@ -157,7 +161,7 @@ with tab_runs:
 
 with tab_train:
     st.caption("Pick a base config, change the values, and start a run. Each run keeps its own copy of the settings.")
-    bases = sorted((ROOT / "configs").glob("*.toml"))
+    bases = sorted(p for p in (ROOT / "configs").glob("*.toml") if not p.name.startswith("ppo"))
     base = st.selectbox("Base config", bases, format_func=lambda p: p.name)
     raw = config.load_raw(base)
     with st.form("train"):
@@ -174,6 +178,41 @@ with tab_train:
         start_training(out, workers, generations)
         st.success(f"Started {safe}. Watch it in the Runs tab (the first generation takes a minute).")
 
+    with st.expander("Start a PPO run instead (stable-baselines3, CPU)"):
+        ppo_bases = sorted((ROOT / "configs").glob("ppo*.toml"))
+        if not ppo_bases:
+            st.write("No configs/ppo*.toml found.")
+        else:
+            pbase = st.selectbox("PPO base config", ppo_bases, format_func=lambda p: p.name, key="pbase")
+            praw = config.load_raw(pbase)
+            pp = {**config.PPO_DEFAULTS, **praw.get("ppo", {})}
+            with st.form("ppo"):
+                pname = st.text_input("Run name", value=f"{praw.get('name', 'ppo')}-custom", key="pname")
+                c1, c2, c3 = st.columns(3)
+                psteps = c1.number_input("Training steps", 4096, 20_000_000, int(pp["total_steps"]), step=50_000)
+                penvs = c1.number_input("Parallel emulators", 1, 32, int(pp["n_envs"]), key="penvs")
+                pp["learning_rate"] = c2.number_input("Learning rate", 1e-6, 1e-1, float(pp["learning_rate"]),
+                                                      format="%.5f", step=1e-4)
+                pp["ent_coef"] = c2.number_input("Entropy bonus (exploration)", 0.0, 0.5, float(pp["ent_coef"]), step=0.005,
+                                                 format="%.3f")
+                pp["gamma"] = c3.number_input("Discount (gamma)", 0.8, 0.9999, float(pp["gamma"]), format="%.4f")
+                pp["reward_scale"] = c3.number_input("Reward scale", 0.0001, 1.0, float(pp["reward_scale"]),
+                                                     format="%.4f")
+                for key, label in [("progress", "Per pixel of progress"), ("clear_bonus", "Clear bonus"),
+                                   ("powerup_bonus", "Power-up bonus"), ("coin_bonus", "Coin bonus"),
+                                   ("time_penalty", "Penalty per frame"), ("death_penalty", "Death penalty")]:
+                    praw["reward"][key] = c2.number_input(label, value=float(praw["reward"].get(key, 0.0)),
+                                                          step=0.1, format="%.2f", key="p_" + key)
+                pgo = st.form_submit_button("Start PPO", type="primary")
+            if pgo:
+                safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in pname).strip("-") or "ppo"
+                praw["name"], praw["ppo"] = safe, pp
+                out = ROOT / "configs" / "custom" / f"{safe}.toml"
+                out.parent.mkdir(exist_ok=True)
+                out.write_text(config.dump(praw))
+                start_training(out, int(penvs), int(psteps), algo="ppo")
+                st.success(f"Started {safe}. Each row in the Runs curves is one evaluation round (not a NEAT generation).")
+
     st.subheader("Runs started from here")
     for info in procs():
         c1, c2, c3 = st.columns([3, 1, 1])
@@ -188,9 +227,10 @@ with tab_live:
     st.caption("Changes are applied at the start of the next generation, for runs that use this version of "
                "the trainer. Runs started before live tuning existed ignore them. Note that changing the "
                "reward changes what 'fitness' means, so numbers before and after are not directly comparable.")
-    candidates = [n for n in run_names() if is_running(n)] or run_names()
+    neat_runs = [n for n in run_names() if (RUNS / n / "neat.cfg").exists()]     # PPO runs can't be tuned live yet
+    candidates = [n for n in neat_runs if is_running(n)] or neat_runs
     if not candidates:
-        st.info("No runs yet.")
+        st.info("No NEAT runs yet.")
     else:
         target = st.selectbox("Run", candidates, key="live_run")
         rdir = RUNS / target

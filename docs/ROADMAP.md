@@ -68,8 +68,10 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 - **The network cannot see the ground at the top of a high jump**: the view covers 6 tiles up and down, and at x 2621 on
   Yoshi's Island 1 the ground is 7 tiles below Mario at the apex (the solid grid is empty there). A taller or lower-reaching
   window is a cheap candidate improvement (see Next).
-- Repeat of the long adaptive run on seeds 2-4: seeds 2 and 3 did not clear in 30 generations (best x 4169 and 3554), so the
-  seed-1 clear may have been partly luck; seed 4 and the final write-up are pending.
+- **Repeat of the long adaptive run** (Yoshi's Island 1, collect inputs, population 100, 30 generations): seed 1 cleared at
+  generation 23; seed 4 cleared at generation 9 (about 238,000 frames); seed 2 reached x 4169 and seed 3 x 3554 without clearing.
+  So 2 of 4 seeds cleared and 3 of 4 got clearly past the old plateau (x ~3550). There is no no-boost baseline of the same size
+  yet (the earlier no-boost runs were population 100 with other inputs and one seed: x 3538 / 3661).
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits

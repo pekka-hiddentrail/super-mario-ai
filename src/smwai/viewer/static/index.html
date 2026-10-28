@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMW Replay Viewer</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1d2026; --text: #e6e8ec; --muted: #8b93a1; --line: #2c313a;
+    --accent: #5aa9ff; --pos: #3fb950; --neg: #f85149; --solid: #9aa3b2; --enemy: #f85149; --item: #f2cc60;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f5f7; --panel: #fff; --text: #1b1f24; --muted: #5b6573; --line: #d5d9e0;
+            --accent: #0b6bd3; --pos: #1a7f37; --neg: #cf222e; --solid: #4b5563; --enemy: #cf222e; --item: #b08800; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; }
+  select, button, input[type=range] { font: inherit; color: var(--text); background: var(--bg);
+           border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  button { cursor: pointer; } button:hover { border-color: var(--accent); }
+  label { color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  main { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  canvas { display: block; max-width: 100%; }
+  #game { image-rendering: pixelated; width: 512px; height: 448px; background: #000; }
+  #stats { color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 8px; }
+  #stats b { color: var(--text); font-weight: 600; }
+  #status { color: var(--muted); }
+  #tip { position: fixed; pointer-events: none; background: var(--panel); border: 1px solid var(--line);
+         border-radius: 6px; padding: 4px 8px; font-size: 12px; display: none; }
+  .legend { display: flex; gap: 14px; color: var(--muted); font-size: 12px; margin-top: 6px; flex-wrap: wrap; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SMW Replay Viewer</h1>
+  <label>Run <select id="run"></select></label>
+  <label>Generation <select id="gen"></select></label>
+  <button id="load">Load replay</button>
+  <button id="play" disabled>Play</button>
+  <input id="seek" type="range" min="0" max="0" value="0" disabled style="width:240px">
+  <label>Speed <select id="speed">
+    <option value="0.25">0.25x</option><option value="0.5">0.5x</option>
+    <option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select></label>
+  <label><input id="weights" type="checkbox" checked> Show connections</label>
+  <span id="status"></span>
+</header>
+<main>
+  <div class="panel">
+    <canvas id="game" width="256" height="224"></canvas>
+    <div id="stats"></div>
+  </div>
+  <div class="panel">
+    <canvas id="net" width="760" height="460"></canvas>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--solid)"></i>solid tile</span>
+      <span><i class="sw" style="background:var(--enemy)"></i>enemy</span>
+      <span><i class="sw" style="background:var(--item)"></i>power-up</span>
+      <span><i class="sw" style="background:var(--pos)"></i>positive weight</span>
+      <span><i class="sw" style="background:var(--neg)"></i>negative weight</span>
+      <span>brighter = source is active; hover a node for its value</span>
+    </div>
+  </div>
+</main>
+<div id="tip"></div>
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let runs = [], R = null, frames = [], idx = 0, playing = false, last = 0, acc = 0;
+let pos = {}, vals = {}, hoverNode = null;
+const gameCtx = $('game').getContext('2d'), net = $('net'), nctx = net.getContext('2d');
+
+async function init() {
+  runs = await (await fetch('/api/runs')).json();
+  $('run').innerHTML = runs.map(r => `<option>${r.name}</option>`).join('');
+  $('run').onchange = fillGens; fillGens();
+  const q = new URLSearchParams(location.search);
+  if (q.get('run')) { $('run').value = q.get('run'); fillGens(); }
+  if (q.get('gen')) $('gen').value = q.get('gen');
+  if (q.get('autoload')) load();
+}
+function fillGens() {
+  const r = runs.find(x => x.name === $('run').value);
+  $('gen').innerHTML = (r ? r.gens : []).map(g =>
+    `<option value="${g.gen}">gen ${g.gen} - fitness ${g.fitness.toFixed(0)}, x ${g.max_x}${g.cleared ? ' (cleared)' : ''}</option>`).join('');
+  if (r && r.gens.length) $('gen').value = r.gens[r.gens.length - 1].gen;
+}
+async function load() {
+  $('status').textContent = 'computing replay (first load can take a while)...';
+  $('load').disabled = true; playing = false; $('play').textContent = 'Play';
+  try {
+    const res = await fetch(`/api/replay?run=${encodeURIComponent($('run').value)}&gen=${$('gen').value}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    R = data; layout();
+    frames = await Promise.all(R.steps.map(s => new Promise(ok => {
+      const im = new Image(); im.onload = () => ok(im); im.src = 'data:image/jpeg;base64,' + s.frame; })));
+    idx = 0; $('seek').max = R.steps.length - 1; $('seek').value = 0;
+    $('seek').disabled = $('play').disabled = false;
+    $('status').textContent = `${R.steps.length} steps, ${R.cleared ? 'cleared' : R.died ? 'died' : 'timed out'}`;
+    draw();
+  } catch (e) { $('status').textContent = 'error: ' + e.message; }
+  $('load').disabled = false;
+}
+function layout() {
+  const g = R.graph, n = 2 * R.radius + 1, cell = 15, ox = 24, oy = 70;
+  pos = {};
+  g.inputs.forEach((k, i) => { pos[k] = [ox + (i % n) * cell + cell / 2, oy + Math.floor(i / n) * cell + cell / 2]; });
+  const cols = {};
+  g.hidden.forEach(h => { (cols[g.layer[h]] = cols[g.layer[h]] || []).push(h); });
+  const top = Math.max(1, ...Object.keys(cols).map(Number), 0) + 1;
+  Object.entries(cols).forEach(([l, ks]) => ks.forEach((k, i) => {
+    pos[k] = [270 + (l - 1) * (330 / Math.max(1, top - 1)) , 40 + (i + 0.5) * (390 / ks.length)];
+  }));
+  g.outputs.forEach((k, i) => { pos[k] = [650, 40 + (i + 0.5) * (390 / g.outputs.length)]; });
+}
+function nodeValues(s) {
+  vals = {};
+  R.graph.inputs.forEach((k, i) => { vals[k] = s.grid.charCodeAt(i) - 98; });   // 'a'=-1, 'b'=0, 'c'=1, 'd'=2
+  R.watch.forEach((k, i) => { vals[k] = s.act[i]; });
+}
+function draw() {
+  if (!R) return;
+  const s = R.steps[idx]; nodeValues(s);
+  gameCtx.drawImage(frames[idx], 0, 0);
+  $('stats').innerHTML = `step <b>${idx}</b>/${R.steps.length - 1} &nbsp; x <b>${s.x}</b> &nbsp; y <b>${s.y}</b> &nbsp; reward <b>${s.reward}</b> &nbsp; final fitness <b>${R.fitness.toFixed(0)}</b>`;
+  $('seek').value = idx;
+  drawNet(s);
+}
+function drawNet(s) {
+  const c = nctx, g = R.graph, n = 2 * R.radius + 1, cell = 15;
+  c.clearRect(0, 0, net.width, net.height);
+  c.font = '12px system-ui'; c.fillStyle = css('--muted');
+  c.fillText('Inputs: tiles around Mario', 24, 56);
+  c.fillText('Hidden', 380, 24); c.fillText('Buttons', 620, 24);
+  if ($('weights').checked) {
+    g.edges.forEach(e => {
+      const a = pos[e.from], b = pos[e.to]; if (!a || !b) return;
+      const v = vals[e.from] || 0, active = e.from < 0 ? v !== 0 : v > 0.5;
+      c.strokeStyle = e.w > 0 ? css('--pos') : css('--neg');
+      c.globalAlpha = active ? 0.85 : 0.10; c.lineWidth = 0.5 + Math.min(3, Math.abs(e.w)) * 0.5;
+      c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+    });
+    c.globalAlpha = 1;
+  }
+  g.inputs.forEach((k, i) => {   // input grid
+    const [x, y] = pos[k], v = vals[k];
+    c.fillStyle = v === 1 ? css('--solid') : v === -1 ? css('--enemy') : v === 2 ? css('--item') : 'transparent';
+    c.fillRect(x - cell / 2 + 1, y - cell / 2 + 1, cell - 2, cell - 2);
+    c.strokeStyle = css('--line'); c.lineWidth = 1; c.strokeRect(x - cell / 2 + 1, y - cell / 2 + 1, cell - 2, cell - 2);
+  });
+  const m = pos[g.inputs[R.radius * n + R.radius]];          // Mario marker
+  c.strokeStyle = css('--accent'); c.lineWidth = 2; c.strokeRect(m[0] - cell / 2, m[1] - cell / 2, cell, cell);
+  g.hidden.forEach(k => node(c, k, 7));
+  g.outputs.forEach((k, i) => {
+    const on = s.pressed[i]; node(c, k, 8, on);
+    c.fillStyle = on ? css('--accent') : css('--muted'); c.font = (on ? 'bold ' : '') + '13px system-ui';
+    c.fillText(R.buttons[i], pos[k][0] + 14, pos[k][1] + 4);
+  });
+}
+function node(c, k, r, on) {
+  const v = Math.max(0, Math.min(1, vals[k] || 0)), [x, y] = pos[k];
+  c.beginPath(); c.arc(x, y, r, 0, 7);
+  c.fillStyle = css('--panel'); c.fill();
+  c.globalAlpha = 0.15 + 0.85 * v; c.fillStyle = on ? css('--accent') : css('--text'); c.fill(); c.globalAlpha = 1;
+  c.strokeStyle = on ? css('--accent') : css('--muted'); c.lineWidth = on ? 2.5 : 1.5; c.stroke();
+}
+function frameLoop(t) {
+  if (playing && R) {
+    acc += (t - last) * parseFloat($('speed').value);
+    const stepMs = 1000 / 15;                        // 4 emulator frames per step = 15 steps/s
+    while (acc >= stepMs) { acc -= stepMs; if (idx < R.steps.length - 1) idx++; else { playing = false; $('play').textContent = 'Replay'; } }
+    draw();
+  }
+  last = t; requestAnimationFrame(frameLoop);
+}
+$('load').onclick = load;
+$('play').onclick = () => {
+  if (!R) return;
+  if (idx >= R.steps.length - 1) idx = 0;
+  playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play';
+};
+$('seek').oninput = e => { idx = +e.target.value; playing = false; $('play').textContent = 'Play'; draw(); };
+$('weights').onchange = draw;
+document.addEventListener('keydown', e => { if (e.code === 'Space' && R) { e.preventDefault(); $('play').click(); } });
+net.onmousemove = e => {
+  if (!R) return;
+  const b = net.getBoundingClientRect(), sx = net.width / b.width;
+  const mx = (e.clientX - b.left) * sx, my = (e.clientY - b.top) * sx;
+  let best = null, bd = 100;
+  Object.entries(pos).forEach(([k, p]) => { const d = (p[0] - mx) ** 2 + (p[1] - my) ** 2; if (d < bd) { bd = d; best = k; } });
+  const tip = $('tip');
+  if (best === null) { tip.style.display = 'none'; return; }
+  const k = +best, kind = k < 0 ? 'input' : R.graph.outputs.includes(k) ? 'button ' + R.buttons[R.graph.outputs.indexOf(k)] : 'hidden';
+  tip.textContent = `${kind} (node ${k}): ${(+vals[k]).toFixed(2)}`;
+  tip.style.display = 'block'; tip.style.left = e.clientX + 12 + 'px'; tip.style.top = e.clientY + 12 + 'px';
+};
+net.onmouseleave = () => { $('tip').style.display = 'none'; };
+init();
+requestAnimationFrame(frameLoop);
+</script>
+</body>
+</html>

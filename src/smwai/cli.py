@@ -19,7 +19,14 @@ def main(argv=None):
     r.add_argument("run_dir")
     r.add_argument("generation", type=int)
 
+    v = sub.add_parser("view", help="start the browser replay viewer")
+    v.add_argument("--runs-dir", default="runs")
+    v.add_argument("--port", type=int, default=8765)
+
     args = ap.parse_args(argv)
+    if args.cmd == "view":
+        from .viewer.server import serve
+        return serve(args.runs_dir, args.port)
     from . import config, train
 
     if args.cmd == "train":

@@ -110,7 +110,8 @@ async function load() {
 }
 function layout() {
   if (!R.graph) { pos = {}; groups = []; return; }       // PPO run: no network graph
-  const g = R.graph, n = 2 * R.radius + 1;
+  const g = R.graph, W = R.window || [R.radius, R.radius, R.radius, R.radius];
+  const cols = W[0] + W[1] + 1, rows = W[2] + W[3] + 1, n = cols;   // window: [left, right, up, down] tiles
   const L = R.layout || [{ name: 'tiles', kind: 'grid' }];
   const nGrids = L.filter(x => x.kind === 'grid').length, multi = nGrids > 1;
   const cell = !multi ? 15 : nGrids > 3 ? 6 : 8;
@@ -119,8 +120,8 @@ function layout() {
   L.forEach(item => {
     if (item.kind === 'grid') {
       const grp = { name: item.name, kind: 'grid', cell, x0: 24, y0: gy, start: idx0 };
-      for (let i = 0; i < n * n; i++) pos[g.inputs[idx0 + i]] = [24 + (i % n) * cell + cell / 2, gy + Math.floor(i / n) * cell + cell / 2];
-      groups.push(grp); idx0 += n * n; gy += n * cell + (multi ? 18 : 0);
+      for (let i = 0; i < rows * cols; i++) pos[g.inputs[idx0 + i]] = [24 + (i % cols) * cell + cell / 2, gy + Math.floor(i / cols) * cell + cell / 2];
+      groups.push(grp); idx0 += rows * cols; gy += rows * cell + (multi ? 18 : 0);
     } else {
       pos[g.inputs[idx0]] = [34 + sx * 70, 446];
       groups.push({ name: item.name, kind: 'scalar', start: idx0 }); idx0 += 1; sx += 1;
@@ -148,7 +149,7 @@ function draw() {
   drawNet(s);
 }
 function drawNet(s) {
-  const c = nctx, g = R.graph, n = 2 * R.radius + 1, cell = 15;
+  const c = nctx, g = R.graph, W = R.window || [R.radius, R.radius, R.radius, R.radius], cols = W[0] + W[1] + 1, rows = W[2] + W[3] + 1, cell = 15;
   c.clearRect(0, 0, net.width, net.height);
   if (!g) {                                              // PPO run: show which buttons are pressed
     c.font = '13px system-ui'; c.fillStyle = css('--muted');
@@ -177,7 +178,7 @@ function drawNet(s) {
       const cs = grp.cell, fillFor = { enemy: '--enemy', item: '--item', coin: '--coin' }[grp.name] || '--solid';
       c.fillStyle = css('--muted'); c.font = '11px system-ui';
       if (groups.length > 1) c.fillText(grp.name, grp.x0, grp.y0 - 4);
-      for (let i = 0; i < n * n; i++) {
+      for (let i = 0; i < rows * cols; i++) {
         const [x, y] = pos[g.inputs[grp.start + i]], v = vals[g.inputs[grp.start + i]];
         c.fillStyle = grp.name === 'tiles'
           ? (v === 1 ? css('--solid') : v === -1 ? css('--enemy') : v === 2 ? css('--item') : 'transparent')
@@ -185,7 +186,7 @@ function drawNet(s) {
         c.fillRect(x - cs / 2 + 1, y - cs / 2 + 1, cs - 2, cs - 2);
         c.strokeStyle = css('--line'); c.lineWidth = 1; c.strokeRect(x - cs / 2 + 1, y - cs / 2 + 1, cs - 2, cs - 2);
       }
-      const m = pos[g.inputs[grp.start + R.radius * n + R.radius]];   // Mario marker
+      const m = pos[g.inputs[grp.start + W[2] * cols + W[0]]];   // Mario marker
       c.strokeStyle = css('--accent'); c.lineWidth = 2; c.strokeRect(m[0] - cs / 2, m[1] - cs / 2, cs, cs);
     } else {
       const k = g.inputs[grp.start], [x, y] = pos[k], v = vals[k];

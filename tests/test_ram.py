@@ -135,3 +135,20 @@ def test_bonus_stars_read_from_goal_bar_counter():
     w = make_wram()
     w[R.BONUS_STARS] = 25
     assert R.read_state(w).bonus_stars == 25
+
+
+def test_window_shapes_and_shifted_view_sees_more_ground():
+    w = make_wram()
+    put16(w, R.PLAYER_X, 160)
+    put16(w, R.PLAYER_Y, 352)
+    for tx in range(0, 40):                               # ground 7 tiles below Mario's row (ty = 22 + 7 = 29 > 26): use ty 26
+        w[R.MAP16_HIGH + (tx // 16) * R.TILES_PER_PAGE + 26 * 16 + tx % 16] = 1
+    st = R.read_state(w)
+    assert R.grid_shape(6) == (13, 13) and R.grid_shape((4, 8, 4, 8)) == (13, 13)
+    assert R.grid_shape((3, 9, 2, 10)) == (13, 13) and R.grid_shape((2, 5, 3, 8)) == (12, 8)
+    symmetric = R.solid_grid(w, st, 6)                    # rows up to +6: ground (4 rows below Mario's row 22) visible
+    assert R.window(6) == (6, 6, 6, 6) and symmetric.shape == (13, 13)
+    tall = R.solid_grid(w, st, (4, 8, 4, 8))
+    assert tall.shape == (13, 13) and tall[4 + 4].all()   # row 4 (Mario) + 4 below = ground row, whole width
+    enemy, item = R.sprite_grids(st, (4, 8, 4, 8), legacy=False)
+    assert enemy.shape == (13, 13) and item.sum() == 0

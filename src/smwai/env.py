@@ -36,11 +36,17 @@ class RewardConfig:
 class EnvConfig:
     levels: list = field(default_factory=lambda: ["YoshiIsland2"])
     frame_skip: int = 4
-    radius: int = 6
+    radius: int = 6                # view: this many tiles every way around Mario ...
+    window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
     inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
+
+
+def view(cfg):
+    """The (left, right, up, down) window around Mario that the network sees, in tiles."""
+    return R.window(cfg.window if cfg.window else cfg.radius)
 
 
 def input_layout(cfg):
@@ -54,7 +60,8 @@ def input_layout(cfg):
 
 
 def n_inputs(cfg):
-    cells = (cfg.radius * 2 + 1) ** 2
+    rows, cols = R.grid_shape(view(cfg))
+    cells = rows * cols
     return sum(cells if kind == "grid" else 1 for _, kind in input_layout(cfg))
 
 
@@ -62,13 +69,13 @@ def build_observation(ram, state, cfg):
     """Flat int8 vector in input_layout order."""
     if cfg.inputs in ("channels", "collect"):
         collect = cfg.inputs == "collect"
-        enemy, item = R.sprite_grids(state, cfg.radius, legacy=not collect)
-        parts = [R.solid_grid(ram, state, cfg.radius).ravel(), enemy.ravel(), item.ravel()]
+        enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect)
+        parts = [R.solid_grid(ram, state, view(cfg)).ravel(), enemy.ravel(), item.ravel()]
         if collect:
-            parts.append(R.coin_grid(ram, state, cfg.radius).ravel())
+            parts.append(R.coin_grid(ram, state, view(cfg)).ravel())
         parts.append(np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8))
         return np.concatenate(parts).astype(np.int8)
-    return R.tile_grid(ram, state, cfg.radius).ravel()
+    return R.tile_grid(ram, state, view(cfg)).ravel()
 
 
 class SmwEnv(gym.Env):

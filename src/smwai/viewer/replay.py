@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image
 
 from .. import config, train
-from ..env import BUTTONS
+from ..env import BUTTONS, view as env_view
 
 
 def genome_graph(genome, neat_cfg):
@@ -78,7 +78,7 @@ def compute_replay(run_dir, generation, use_cache=True):
     result = json.dumps({
         "generation": generation, "fitness": total, "max_x": info["max_x"],
         "cleared": bool(info.get("cleared")), "died": bool(info.get("died")),
-        "buttons": BUTTONS, "radius": cfg.env.radius, "watch": watch, "graph": graph,
+        "buttons": BUTTONS, "radius": cfg.env.radius, "window": list(env_view(cfg.env)), "watch": watch, "graph": graph,
         "layout": [{"name": n, "kind": k} for n, k in env.layout],
         "steps": steps})
     return _cache(cache, result)
@@ -116,5 +116,5 @@ def compute_action_replay(run_dir, generation):
     return json.dumps({
         "generation": generation, "fitness": total, "max_x": info["max_x"],
         "cleared": bool(info.get("cleared")), "died": bool(info.get("died")),
-        "buttons": BUTTONS, "radius": cfg.env.radius, "watch": [], "graph": None,
+        "buttons": BUTTONS, "radius": cfg.env.radius, "window": list(env_view(cfg.env)), "watch": [], "graph": None,
         "layout": [{"name": n, "kind": k} for n, k in env.layout], "steps": steps})

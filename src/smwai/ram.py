@@ -130,51 +130,67 @@ def read_state(ram):
 EMPTY, SOLID, ENEMY, ITEM = 0, 1, -1, 2
 
 
-def solid_grid(ram, state, radius=6):
-    """(2r+1, 2r+1) int8 grid centred on Mario: 1 where the Map16 tile is solid."""
-    size = radius * 2 + 1
-    grid = np.zeros((size, size), dtype=np.int8)
-    for row, dy in enumerate(range(-radius * 16, radius * 16 + 1, 16)):
-        for col, dx in enumerate(range(-radius * 16, radius * 16 + 1, 16)):
-            wx, wy = state.x + dx, state.y + dy
-            tx, ty = (wx + 8) // 16, wy // 16
-            if wx < 0 or wy < 0 or ty >= 27:
-                continue
-            idx = MAP16_HIGH + (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
-            if idx < len(ram) and ram[idx] == 1:
-                grid[row, col] = SOLID
+def window(view):
+    """Normalise a view spec to (left, right, up, down) in tiles: an int r means r tiles every way."""
+    if isinstance(view, int):
+        return view, view, view, view
+    left, right, up, down = view
+    return int(left), int(right), int(up), int(down)
+
+
+def grid_shape(view):
+    left, right, up, down = window(view)
+    return up + down + 1, left + right + 1
+
+
+def _cells(state, view):
+    """(row, col, world_x, world_y) for each tile of the window around Mario."""
+    left, right, up, down = window(view)
+    for row, dy in enumerate(range(-up * 16, down * 16 + 1, 16)):
+        for col, dx in enumerate(range(-left * 16, right * 16 + 1, 16)):
+            yield row, col, state.x + dx, state.y + dy
+
+
+def solid_grid(ram, state, view=6):
+    """Window grid centred on Mario (rows up..down, columns left..right): 1 where the Map16 tile is solid."""
+    grid = np.zeros(grid_shape(view), dtype=np.int8)
+    for row, col, wx, wy in _cells(state, view):
+        tx, ty = (wx + 8) // 16, wy // 16
+        if wx < 0 or wy < 0 or ty >= 27:
+            continue
+        idx = MAP16_HIGH + (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
+        if idx < len(ram) and ram[idx] == 1:
+            grid[row, col] = SOLID
     return grid
 
 
-def coin_grid(ram, state, radius=6):
-    """(2r+1, 2r+1) int8 grid centred on Mario: 1 where a coin tile is still uncollected."""
-    size = radius * 2 + 1
-    grid = np.zeros((size, size), dtype=np.int8)
-    for row, dy in enumerate(range(-radius * 16, radius * 16 + 1, 16)):
-        for col, dx in enumerate(range(-radius * 16, radius * 16 + 1, 16)):
-            wx, wy = state.x + dx, state.y + dy
-            tx, ty = (wx + 8) // 16, wy // 16
-            if wx < 0 or wy < 0 or ty >= 27:
-                continue
-            off = (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
-            if MAP16_HIGH + off < len(ram) and ram[MAP16_LOW + off] == COIN_TILE and ram[MAP16_HIGH + off] == 0:
-                grid[row, col] = 1
+def coin_grid(ram, state, view=6):
+    """Window grid centred on Mario: 1 where a coin tile is still uncollected."""
+    grid = np.zeros(grid_shape(view), dtype=np.int8)
+    for row, col, wx, wy in _cells(state, view):
+        tx, ty = (wx + 8) // 16, wy // 16
+        if wx < 0 or wy < 0 or ty >= 27:
+            continue
+        off = (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
+        if MAP16_HIGH + off < len(ram) and ram[MAP16_LOW + off] == COIN_TILE and ram[MAP16_HIGH + off] == 0:
+            grid[row, col] = 1
     return grid
 
 
-def sprite_grids(state, radius=6, legacy=True):
-    """(enemy, item) int8 grids centred on Mario with 1 where such a sprite is.
+def sprite_grids(state, view=6, legacy=True):
+    """(enemy, item) window grids with 1 where such a sprite is.
 
     legacy=True keeps the original behaviour (every non-item sprite, extended ones included, is an
     enemy). legacy=False only marks real sprites: enemies, power-ups; Yoshi and extended sprites are skipped.
     """
-    size = radius * 2 + 1
-    enemy = np.zeros((size, size), dtype=np.int8)
-    item = np.zeros((size, size), dtype=np.int8)
+    left, right, up, down = window(view)
+    rows, cols = grid_shape(view)
+    enemy = np.zeros((rows, cols), dtype=np.int8)
+    item = np.zeros((rows, cols), dtype=np.int8)
     for sp in state.sprites:
-        col = round((sp.x - state.x) / 16) + radius
-        row = round((sp.y - state.y) / 16) + radius
-        if not (0 <= row < size and 0 <= col < size):
+        col = round((sp.x - state.x) / 16) + left
+        row = round((sp.y - state.y) / 16) + up
+        if not (0 <= row < rows and 0 <= col < cols):
             continue
         if legacy:
             (item if sp.is_item else enemy)[row, col] = 1
@@ -185,10 +201,10 @@ def sprite_grids(state, radius=6, legacy=True):
     return enemy, item
 
 
-def tile_grid(ram, state, radius=6):
+def tile_grid(ram, state, view=6):
     """Mixed grid: 1 solid, -1 enemy, 2 power-up, 0 empty (sprites overwrite tiles)."""
-    grid = solid_grid(ram, state, radius)
-    enemy, item = sprite_grids(state, radius)
+    grid = solid_grid(ram, state, view)
+    enemy, item = sprite_grids(state, view)
     grid[enemy == 1] = ENEMY
     grid[item == 1] = ITEM
     return grid

@@ -1,0 +1,30 @@
+# Does a shifted view help? Same number of inputs (13 x 13 per grid), but the window sees 8 tiles ahead and 8 below
+# Mario instead of 6 every way, so the ground stays visible at the top of a jump (at x 2621 on Yoshi Island 1 the
+# ground is 7 tiles below the apex). Both variants use collect inputs and adaptive mutation.
+# Seeds 3-5 repeat the earlier `adaptive-fixed` runs (x 2808 / 3674 / 3432), which doubles as a determinism check.
+# Run: smwai experiment --spec configs/experiments/window_yi1.toml
+name = "window-yi1"
+base = "configs/yi1.toml"
+seeds = [3, 4, 5, 6, 7]
+generations = 14
+pop_size = 50
+workers = 12
+
+[[variant]]
+name = "symmetric"          # 6 tiles every way (the current default)
+[variant.env]
+inputs = "collect"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "shifted"            # [left, right, up, down] = 4, 8, 4, 8
+[variant.env]
+inputs = "collect"
+window = [4, 8, 4, 8]
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

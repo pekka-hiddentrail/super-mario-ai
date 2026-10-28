@@ -9,7 +9,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from . import config, train
-from .env import BUTTONS
+from .env import BUTTONS, view as env_view
+from .ram import grid_shape, window
 from .viewer.replay import genome_graph
 
 SCALE = 2
@@ -54,8 +55,11 @@ def _mix(fg, alpha):
 class NetworkPanel:
     """Draws the network of one genome for any step. Positions are computed once."""
 
-    def __init__(self, graph, layout, radius, height):
-        self.graph, self.layout, self.n, self.height = graph, layout, 2 * radius + 1, height
+    def __init__(self, graph, layout, view, height):
+        left, _right, up, _down = window(view)
+        self.rows, self.cols = grid_shape(view)
+        self.mario = (up, left)                    # row, column of Mario's tile in each grid
+        self.graph, self.layout, self.height = graph, layout, height
         grids = [item for item in layout if item["kind"] == "grid"]
         self.cell = 14 if len(grids) == 1 else 9 if len(grids) <= 3 else 7
         self.pos, self.groups = {}, []
@@ -63,11 +67,11 @@ class NetworkPanel:
         for item in layout:
             if item["kind"] == "grid":
                 self.groups.append(("grid", item["name"], idx, 10, y))
-                for i in range(self.n * self.n):
-                    self.pos[graph["inputs"][idx + i]] = (10 + (i % self.n) * self.cell + self.cell / 2,
-                                                          y + (i // self.n) * self.cell + self.cell / 2)
-                idx += self.n * self.n
-                y += self.n * self.cell + (16 if len(grids) > 1 else 0)
+                for i in range(self.rows * self.cols):
+                    self.pos[graph["inputs"][idx + i]] = (10 + (i % self.cols) * self.cell + self.cell / 2,
+                                                          y + (i // self.cols) * self.cell + self.cell / 2)
+                idx += self.rows * self.cols
+                y += self.rows * self.cell + (16 if len(grids) > 1 else 0)
             else:
                 self.pos[graph["inputs"][idx]] = (sx, height - 26)
                 self.groups.append(("scalar", item["name"], idx, sx, height - 26))
@@ -84,7 +88,7 @@ class NetworkPanel:
             self.pos[o] = (480, 56 + (i + 0.5) * (height - 110) / len(graph["outputs"]))
 
     def draw(self, obs, vals, pressed):
-        g, n, cell = self.graph, self.n, self.cell
+        g, cell = self.graph, self.cell
         img = Image.new("RGB", (PANEL_W, self.height), BG)
         d = ImageDraw.Draw(img)
         small, mid = ImageFont.load_default(size=11), ImageFont.load_default(size=13)
@@ -107,7 +111,7 @@ class NetworkPanel:
         for kind, name, start, x, y in self.groups:
             if kind == "grid":
                 d.text((x, y - 13), name, fill=MUTED, font=small)
-                for i in range(n * n):
+                for i in range(self.rows * self.cols):
                     cx, cy = self.pos[g["inputs"][start + i]]
                     v = value[g["inputs"][start + i]]
                     if name == "tiles":
@@ -116,7 +120,7 @@ class NetworkPanel:
                         fill = GRID_COLORS.get(name) if v else None
                     box = [cx - cell / 2 + 1, cy - cell / 2 + 1, cx + cell / 2 - 1, cy + cell / 2 - 1]
                     d.rectangle(box, fill=fill, outline=(44, 49, 58))
-                mx, my = self.pos[g["inputs"][start + (n // 2) * n + n // 2]]
+                mx, my = self.pos[g["inputs"][start + self.mario[0] * self.cols + self.mario[1]]]
                 d.rectangle([mx - cell / 2, my - cell / 2, mx + cell / 2, my + cell / 2], outline=ACCENT, width=2)
             else:
                 v = value[g["inputs"][start]]
@@ -201,7 +205,7 @@ def render_run(run_dir, out_path=None, generation=None):
     result = "cleared" if info.get("cleared") else "died" if info.get("died") else "timed out"
     head = f"{run_dir.name}   generation {generation}"
     height = 224 * SCALE + BANNER
-    panel = NetworkPanel(graph, layout, cfg.env.radius, height) if graph else None
+    panel = NetworkPanel(graph, layout, env_view(cfg.env), height) if graph else None
     writer = imageio.get_writer(str(out_path), fps=60, codec="libx264", quality=7, macro_block_size=None,
                                 ffmpeg_params=["-movflags", "+faststart"])
     try:

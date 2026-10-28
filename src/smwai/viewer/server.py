@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from .mapdata import level_map, run_path
 from .replay import compute_replay
 
 STATIC = Path(__file__).parent / "static"
@@ -45,6 +46,17 @@ def make_handler(runs_dir):
                     self._send((STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
                 elif url.path == "/api/runs":
                     self._send(json.dumps(list_runs(runs_dir)))
+                elif url.path in ("/map", "/map.html"):
+                    self._send((STATIC / "map.html").read_bytes(), "text/html; charset=utf-8")
+                elif url.path in ("/api/level", "/api/path"):
+                    name = q["run"][0]
+                    if not _NAME.match(name) or not (runs_dir / name).is_dir():
+                        return self._send('{"error": "unknown run"}', status=404)
+                    with _emu_lock:
+                        if url.path == "/api/level":
+                            self._send(level_map(runs_dir / name))
+                        else:
+                            self._send(json.dumps(run_path(runs_dir / name, int(q["gen"][0]))))
                 elif url.path == "/api/replay":
                     name, gen = q["run"][0], int(q["gen"][0])
                     if not _NAME.match(name) or not (runs_dir / name).is_dir():

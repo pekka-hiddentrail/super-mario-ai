@@ -46,7 +46,7 @@ def compute_replay(run_dir, generation, use_cache=True):
     if use_cache and cache.exists():
         return cache.read_text()
     cfg = config.load(run_dir / "config.toml")
-    train._ENV_CFG = cfg.env
+    train.use_config(cfg.env)
     neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
                            neat.DefaultStagnation, str(run_dir / "neat.cfg"))
     with open(run_dir / "best" / f"gen_{generation:04d}.pkl", "rb") as f:

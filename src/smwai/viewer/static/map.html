@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMW Path Map</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1d2026; --text: #e6e8ec; --muted: #8b93a1; --line: #2c313a;
+    --accent: #5aa9ff; --best: #f2994a; --solid: #5b6573; --deco: #2f3640; --sky: #181b20; --bad: #f85149;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f5f7; --panel: #fff; --text: #1b1f24; --muted: #5b6573; --line: #d5d9e0;
+            --accent: #0b4fa8; --best: #c2410c; --solid: #6b7280; --deco: #d9dde4; --sky: #eef1f5; --bad: #cf222e; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; }
+  select, button, input[type=number] { font: inherit; color: var(--text); background: var(--bg);
+           border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  input[type=number] { width: 70px; }
+  button { cursor: pointer; } button:hover { border-color: var(--accent); }
+  label { color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  a { color: var(--accent); }
+  main { padding: 16px; }
+  #wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  canvas { display: block; }
+  #status { color: var(--muted); }
+  .legend { display: flex; gap: 16px; color: var(--muted); font-size: 12px; margin-top: 10px; flex-wrap: wrap; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  #table { margin-top: 14px; max-height: 260px; overflow: auto; background: var(--panel); border: 1px solid var(--line);
+           border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 10px; border-bottom: 1px solid var(--line); }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SMW Path Map</h1>
+  <a href="/">Replay viewer</a>
+  <label>Run <select id="run"></select></label>
+  <label>From gen <input id="from" type="number" min="0" value="0"></label>
+  <label>To <input id="to" type="number" min="0" value="0"></label>
+  <label>Every <input id="step" type="number" min="1" value="1" style="width:56px"></label>
+  <button id="load">Load paths</button>
+  <label>Zoom <select id="zoom"><option value="4">4</option><option value="6" selected>6</option>
+    <option value="8">8</option><option value="12">12</option></select></label>
+  <label><input id="tiles" type="checkbox" checked> Level tiles</label>
+  <span id="status"></span>
+</header>
+<main>
+  <div id="wrap"><canvas id="map" width="800" height="200"></canvas></div>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--solid)"></i>solid tile</span>
+    <span><i class="sw" style="background:var(--deco)"></i>other tile (blocks, coins, decoration)</span>
+    <span><i class="sw" style="background:var(--accent)"></i>run path - darker = higher fitness, lighter = lower</span>
+    <span><i class="sw" style="background:var(--best)"></i>best run</span>
+    <span>x = where a run ended (died / timed out), flag = cleared the level</span>
+  </div>
+  <div id="table"><table><thead><tr><th>Gen</th><th>Fitness</th><th>Furthest x</th><th>Result</th></tr></thead><tbody id="rows"></tbody></table></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const cv = $('map'), ctx = cv.getContext('2d');
+let runs = [], level = null, paths = [];
+
+async function init() {
+  runs = await (await fetch('/api/runs')).json();
+  $('run').innerHTML = runs.map(r => `<option>${r.name}</option>`).join('');
+  $('run').onchange = setRange; setRange();
+  const q = new URLSearchParams(location.search);
+  if (q.get('run')) { $('run').value = q.get('run'); setRange(); }
+  if (q.get('autoload')) load();
+}
+function setRange() {
+  const r = runs.find(x => x.name === $('run').value);
+  if (r && r.gens.length) { $('from').value = r.gens[0].gen; $('to').value = r.gens[r.gens.length - 1].gen; }
+}
+async function load() {
+  const run = $('run').value, r = runs.find(x => x.name === run);
+  const gens = r.gens.filter(g => g.gen >= +$('from').value && g.gen <= +$('to').value
+                                  && (g.gen - +$('from').value) % +$('step').value === 0);
+  $('load').disabled = true; paths = [];
+  try {
+    $('status').textContent = 'loading level map...';
+    const lv = await (await fetch(`/api/level?run=${encodeURIComponent(run)}`)).json();
+    if (lv.error) throw new Error(lv.error);
+    level = lv; redraw();
+    for (let i = 0; i < gens.length; i++) {
+      $('status').textContent = `loading paths ${i + 1}/${gens.length} (a run not recorded with a path is replayed once)...`;
+      const p = await (await fetch(`/api/path?run=${encodeURIComponent(run)}&gen=${gens[i].gen}`)).json();
+      if (p.error) throw new Error(p.error);
+      paths.push(p); redraw();
+    }
+    $('status').textContent = `${paths.length} runs`;
+  } catch (e) { $('status').textContent = 'error: ' + e.message; }
+  $('load').disabled = false;
+}
+function redraw() {
+  if (!level) return;
+  const t = +$('zoom').value, cols = level.rows[0].length, rows = level.rows.length;
+  cv.width = cols * t; cv.height = rows * t;
+  ctx.fillStyle = css('--sky'); ctx.fillRect(0, 0, cv.width, cv.height);
+  if ($('tiles').checked) {
+    level.rows.forEach((row, y) => { for (let x = 0; x < cols; x++) {
+      const c = row[x]; if (c === '.') continue;
+      ctx.fillStyle = c === '#' ? css('--solid') : css('--deco');
+      ctx.fillRect(x * t, y * t, t, t);
+    } });
+  }
+  const fits = paths.map(p => p.fitness), lo = Math.min(...fits), hi = Math.max(...fits);
+  const order = [...paths].sort((a, b) => a.fitness - b.fitness);   // worst first, best on top
+  order.forEach((p, i) => {
+    const best = p === order[order.length - 1], k = hi > lo ? (p.fitness - lo) / (hi - lo) : 1;
+    ctx.globalAlpha = best ? 1 : 0.08 + 0.72 * k;
+    ctx.strokeStyle = best ? css('--best') : css('--accent'); ctx.lineWidth = best ? 2.5 : 1.2;
+    ctx.beginPath();
+    p.path.forEach(([x, y], j) => { const px = x / 16 * t, py = (y / 16 + 1) * t; j ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+    ctx.stroke();
+    const [ex, ey] = p.path[p.path.length - 1], px = ex / 16 * t, py = (ey / 16 + 1) * t;
+    if (p.cleared) {                       // flag
+      ctx.fillStyle = css('--best'); ctx.fillRect(px, py - 3 * t, 1.2, 3 * t); ctx.fillRect(px, py - 3 * t, 2 * t, t);
+    } else {                               // x where the run ended
+      ctx.strokeStyle = css('--bad'); ctx.lineWidth = 1.5; const s = Math.max(3, t * 0.6);
+      ctx.beginPath(); ctx.moveTo(px - s, py - s); ctx.lineTo(px + s, py + s); ctx.moveTo(px + s, py - s); ctx.lineTo(px - s, py + s); ctx.stroke();
+    }
+  });
+  ctx.globalAlpha = 1;
+  $('rows').innerHTML = [...paths].sort((a, b) => b.fitness - a.fitness).map(p =>
+    `<tr><td>${p.generation}</td><td>${p.fitness.toFixed(0)}</td><td>${p.max_x}</td><td>${p.cleared ? 'cleared' : 'ended'}</td></tr>`).join('');
+}
+$('load').onclick = load; $('zoom').onchange = redraw; $('tiles').onchange = redraw;
+init();
+</script>
+</body>
+</html>

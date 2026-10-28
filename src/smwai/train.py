@@ -21,6 +21,14 @@ def _get_env():
     return _ENV
 
 
+def use_config(env_cfg):
+    """Select the env config for this process (reuses the emulator if one exists)."""
+    global _ENV_CFG
+    _ENV_CFG = env_cfg
+    if _ENV is not None:
+        _ENV.cfg = env_cfg
+
+
 def _to_mask(action):
     return int(sum(1 << i for i, on in enumerate(action) if on))
 
@@ -34,27 +42,32 @@ def run_episode(genome, config, record=False):
     env = _get_env()
     net = neat.nn.FeedForwardNetwork.create(genome, config)
     obs, info = env.reset()
-    total, actions = 0.0, []
+    total, actions, path = 0.0, [], [[info["x"], info["y"]]]
     while True:
         action = np.array(net.activate(obs.ravel().astype(np.float64))) > 0.5
         if record:
             actions.append(_to_mask(action))
         obs, reward, term, trunc, info = env.step(action)
         total += reward
+        if record:
+            path.append([info["x"], info["y"]])
         if term or trunc:
+            info["path"] = path
             return total, actions, info
 
 
 def replay_actions(masks):
-    """Re-run a recorded action list headless; returns (reward, info)."""
+    """Re-run a recorded action list headless; returns (reward, info) with info["path"]."""
     env = _get_env()
-    env.reset()
-    total, info = 0.0, {}
+    _, info = env.reset()
+    total, path = 0.0, [[info["x"], info["y"]]]
     for mask in masks:
         _, reward, term, trunc, info = env.step(_from_mask(mask))
         total += reward
+        path.append([info["x"], info["y"]])
         if term or trunc:
             break
+    info["path"] = path
     return total, info
 
 
@@ -89,7 +102,8 @@ class RunReporter(neat.reporting.BaseReporter):
             pickle.dump(best, f)
         stem.with_suffix(".json").write_text(json.dumps({
             "generation": self.generation, "fitness": best.fitness, "max_x": info["max_x"],
-            "cleared": info["cleared"], "buttons": BUTTONS, "actions": actions}))
+            "cleared": info["cleared"], "buttons": BUTTONS, "actions": actions,
+            "path": info["path"]}))
         if best.fitness > self.best_ever:
             self.best_ever = best.fitness
             with open(self.dir / "best_ever.pkl", "wb") as f:

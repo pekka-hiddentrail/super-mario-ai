@@ -31,3 +31,19 @@ def test_list_runs_reads_best_files(tmp_path):
         {"generation": 3, "fitness": 12.5, "max_x": 99, "cleared": False, "actions": [1, 2]}))
     runs = list_runs(tmp_path)
     assert runs == [{"name": "run1", "gens": [{"gen": 3, "fitness": 12.5, "max_x": 99, "cleared": False}]}]
+
+
+def test_tile_char_classification():
+    from smwai.viewer.mapdata import _tile_char
+    assert _tile_char(0x25, 0) == "."
+    assert _tile_char(0x30, 1) == "#"
+    assert _tile_char(0x2B, 0) == "o"
+
+
+def test_run_path_uses_recorded_path(tmp_path):
+    from smwai.viewer.mapdata import run_path
+    best = tmp_path / "r" / "best"
+    best.mkdir(parents=True)
+    (best / "gen_0001.json").write_text(json.dumps(
+        {"generation": 1, "fitness": 5.0, "max_x": 9, "cleared": True, "actions": [], "path": [[0, 1], [2, 3]]}))
+    assert run_path(tmp_path / "r", 1)["path"] == [[0, 1], [2, 3]]

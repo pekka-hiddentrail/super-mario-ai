@@ -8,9 +8,9 @@ Status: done = in `main`/branch, next = planned order, later = wanted but not sc
 - NEAT v1: CLI training, parallel workers, per-generation best-run recording, checkpoints
 
 ## Next
-1. **Replay viewer** - play a recorded generation in the browser (game frame + network overlay
+1. ~~**Replay viewer**~~ done (`scripts/view.sh`, http://localhost:8765) - play a recorded generation in the browser (game frame + network overlay
    like MarI/O: input grid, hidden nodes, button outputs, green/red weights, live activations).
-2. **Level map + path view** - see below.
+2. ~~**Level map + path view**~~ done (http://localhost:8765/map). Still to do: real graphics, path marks for power-ups.
 3. **Streamlit dashboard** - training curves, parameter editing, run browser, embeds the viewer.
 4. Live parameter tuning between generations (reward weights, mutation rates).
 

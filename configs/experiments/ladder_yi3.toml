@@ -17,9 +17,9 @@ name = "collect"             # separate solid/enemy/item/coin grids + water, Yos
 inputs = "collect"
 
 [[variant]]
-name = "diverse"             # more, smaller species: lower compatibility threshold
+name = "diverse"             # a few more species: lower compatibility threshold (1.5 gave one species per genome)
 [variant.neat]
-compatibility_threshold = 1.5
+compatibility_threshold = 2.5
 
 [[variant]]
 name = "patient"             # let a run keep trying twice as long without progress

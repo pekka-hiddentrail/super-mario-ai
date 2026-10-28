@@ -66,14 +66,14 @@ species_elitism = 2
 [DefaultReproduction]
 elitism = {elitism}
 survival_threshold = {survival_threshold}
-min_species_size = 2
+min_species_size = {min_species_size}
 """
 
 NEAT_DEFAULTS = dict(
     pop_size=100, initial_connection="partial_direct 0.05", conn_add_prob=0.5,
     conn_delete_prob=0.2, node_add_prob=0.2, node_delete_prob=0.1, weight_mutate_rate=0.8,
     weight_mutate_power=0.5, compatibility_threshold=3.0, max_stagnation=15,
-    survival_threshold=0.2, elitism=2)
+    survival_threshold=0.2, elitism=2, min_species_size=2)
 
 
 PPO_DEFAULTS = dict(

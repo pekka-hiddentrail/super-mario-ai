@@ -63,3 +63,12 @@ def test_list_videos_and_best_generation(tmp_path):
     (run / "videos" / "best_gen_0002.mp4").write_bytes(b"x" * 10)
     vids = list_videos(tmp_path)
     assert vids[0]["generation"] == 2 and vids[0]["fitness"] == 99.0 and vids[0]["cleared"] is True
+
+
+def test_run_reporter_is_picklable(tmp_path):
+    """NEAT checkpoints pickle the reporters; a worker pool inside one crashed training at generation 5."""
+    import pickle
+
+    from smwai.train import RunReporter
+    reporter = RunReporter(tmp_path / "run", None, {"frames": 123})
+    assert pickle.loads(pickle.dumps(reporter)).stats["frames"] == 123

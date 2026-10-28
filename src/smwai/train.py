@@ -105,10 +105,10 @@ def eval_genome_full(genome, config):
 class PoolEvaluator:
     """Evaluates a generation on a worker pool (or serially) and counts the emulator frames used."""
 
-    def __init__(self, n_workers):
+    def __init__(self, n_workers, stats):
         import multiprocessing
         self.pool = multiprocessing.Pool(n_workers) if n_workers > 1 else None
-        self.last_frames = 0
+        self.stats = stats          # shared with the reporter; a plain dict, so checkpoints can pickle it
 
     def evaluate(self, genomes, config):
         if self.pool is not None:
@@ -118,7 +118,7 @@ class PoolEvaluator:
             results = [eval_genome_full(g, config) for _, g in genomes]
         for (_, genome), (fitness, _frames) in zip(genomes, results):
             genome.fitness = fitness
-        self.last_frames = sum(frames for _, frames in results)
+        self.stats["frames"] = sum(frames for _, frames in results)
 
     def close(self):
         if self.pool is not None:
@@ -128,10 +128,10 @@ class PoolEvaluator:
 class RunReporter(neat.reporting.BaseReporter):
     """Writes metrics.csv and records the best run of every generation."""
 
-    def __init__(self, run_dir, neat_cfg, evaluator=None):
+    def __init__(self, run_dir, neat_cfg, stats=None):
         self.dir = Path(run_dir)
         self.neat_cfg = neat_cfg
-        self.evaluator = evaluator
+        self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
         self.applied = None
         (self.dir / "best").mkdir(parents=True, exist_ok=True)
         self.generation = -1
@@ -183,7 +183,7 @@ class RunReporter(neat.reporting.BaseReporter):
                 pickle.dump(best, f)
         secs = time.time() - self.gen_start
         n_species = len(species.species)
-        frames = self.evaluator.last_frames if self.evaluator is not None else 0
+        frames = self.stats.get("frames", 0)
         self.total_frames += frames
         row = (f"{self.generation},{best.fitness:.1f},{np.mean(fits):.1f},{n_species},"
                f"{info['max_x']},{secs:.1f},{int(deterministic)}")
@@ -216,8 +216,9 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
     _ACTIVE = str(run_dir / "active.json")      # set before the worker pool forks
     n_workers = cfg.workers if workers is None else workers
     # the pool must fork before this process creates its own emulator
-    evaluator = PoolEvaluator(n_workers)
-    pop.add_reporter(RunReporter(run_dir, pop.config, evaluator))
+    stats = {"frames": 0}
+    evaluator = PoolEvaluator(n_workers, stats)
+    pop.add_reporter(RunReporter(run_dir, pop.config, stats))
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:

@@ -172,7 +172,7 @@ class RunReporter(neat.reporting.BaseReporter):
         a = self.adapt
         if not a.get("enabled"):
             return
-        if best_fitness > self.adapt_best + 1e-9:
+        if best_fitness > self.adapt_best + a.get("min_improvement", 0.0) + 1e-9:   # tiny gains are noise
             self.adapt_best, self.stall = best_fitness, 0
         else:
             self.stall += 1

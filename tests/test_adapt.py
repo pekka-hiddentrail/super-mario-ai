@@ -50,3 +50,16 @@ def test_adaptive_mutation_disabled_changes_nothing(tmp_path):
         rep.generation = gen
         rep._adapt_mutation(1.0)
     assert ncfg.genome_config.weight_mutate_power == before and not rep.boosted
+
+
+def test_tiny_improvements_do_not_reset_the_stall_counter(tmp_path):
+    ncfg = _neat_cfg(tmp_path)
+    adapt = {**config.ADAPT_DEFAULTS, "enabled": True, "stall_generations": 3, "min_improvement": 20.0}
+    rep = RunReporter(tmp_path / "run", ncfg, {"frames": 0}, adapt)
+    for gen, fit in enumerate([100.0, 101.0, 103.0, 104.0]):    # +1..+3 per generation: noise
+        rep.generation = gen
+        rep._adapt_mutation(fit)
+    assert rep.boosted, "creeping gains of a few pixels must not hide a plateau"
+    rep.generation = 4
+    rep._adapt_mutation(130.0)                                   # +26 over the reference: a real gain
+    assert not rep.boosted

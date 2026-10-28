@@ -78,7 +78,8 @@ NEAT_DEFAULTS = dict(
 
 ADAPT_DEFAULTS = dict(
     enabled=False,          # adaptive mutation: mutate harder while the best fitness is stalled
-    stall_generations=5,    # generations without a new best before boosting
+    stall_generations=5,    # generations without a meaningful new best before boosting
+    min_improvement=20.0,   # a new best counts only if it beats the last one by this much (fitness units, ~pixels)
     power_factor=2.0,       # weight_mutate_power multiplier while boosted
     structure_factor=1.5,   # conn_add_prob / node_add_prob multiplier while boosted
     rate_add=0.1)           # added to weight_mutate_rate while boosted (capped at 1)

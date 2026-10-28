@@ -79,3 +79,32 @@ def test_water_and_yoshi_flags():
     w[R.ON_YOSHI] = 2
     st = R.read_state(w)
     assert st.in_water and st.on_yoshi
+
+
+def test_coin_grid_and_sprite_kinds():
+    w = make_wram()
+    put16(w, R.PLAYER_X, 160)
+    put16(w, R.PLAYER_Y, 352)
+    # a coin tile one row above Mario's row, same column: tile (x=(160+8)//16=10, y=21)
+    off = (10 // 16) * R.TILES_PER_PAGE + 21 * 16 + 10
+    w[R.MAP16_LOW + off] = R.COIN_TILE
+    w[R.MAP16_HIGH + off] = 0
+    # Yoshi (neutral) and an enemy one tile right
+    w[R.SPRITE_STATUS] = 8
+    w[R.SPRITE_NUMBER] = 0x35
+    w[R.SPRITE_X_LO] = 176
+    w[R.SPRITE_Y_LO], w[R.SPRITE_Y_HI] = 352 & 0xFF, 352 >> 8
+    w[R.SPRITE_STATUS + 1] = 8
+    w[R.SPRITE_NUMBER + 1] = 0x10
+    w[R.SPRITE_X_LO + 1] = 192
+    w[R.SPRITE_Y_LO + 1], w[R.SPRITE_Y_HI + 1] = 352 & 0xFF, 352 >> 8
+    # one extended sprite (e.g. a fireball)
+    w[R.EXT_NUMBER] = 5
+    w[R.EXT_X_LO], w[R.EXT_Y_LO] = 144, 96
+    w[R.EXT_Y_HI] = 1
+    st = R.read_state(w)
+    assert R.coin_grid(w, st)[5, 6] == 1 and R.coin_grid(w, st).sum() == 1
+    enemy, item = R.sprite_grids(st, legacy=False)
+    assert enemy.sum() == 1 and enemy[6, 8] == 1 and item.sum() == 0   # Yoshi + extended sprite skipped
+    legacy_enemy, _ = R.sprite_grids(st, legacy=True)
+    assert legacy_enemy.sum() == 3                                       # old behaviour kept

@@ -93,7 +93,7 @@ def param_inputs(raw, live_mode, prefix):
             raw["neat"]["pop_size"] = st.number_input("Population", 10, 2000, int(raw["neat"]["pop_size"]),
                                                       key=prefix + "pop")
         if not live_mode:
-            modes = ["mixed", "channels"]
+            modes = ["mixed", "channels", "collect"]
             raw["env"]["inputs"] = st.selectbox("Network inputs", modes, key=prefix + "inputs",
                                                 index=modes.index(raw["env"].get("inputs", "mixed")),
                                                 help="mixed: one tile grid. channels: separate solid / enemy / "

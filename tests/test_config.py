@@ -35,3 +35,10 @@ def test_input_counts_by_mode():
     from smwai.env import EnvConfig, n_inputs
     assert n_inputs(EnvConfig()) == 169
     assert n_inputs(EnvConfig(inputs="channels")) == 169 * 3 + 3
+
+
+def test_collect_mode_has_coin_grid():
+    from smwai.env import EnvConfig, input_layout, n_inputs
+    cfg = EnvConfig(inputs="collect")
+    assert [n for n, _ in input_layout(cfg)][:4] == ["solid", "enemy", "item", "coin"]
+    assert n_inputs(cfg) == 169 * 4 + 3

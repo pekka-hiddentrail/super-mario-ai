@@ -37,7 +37,8 @@ def test_tile_char_classification():
     from smwai.viewer.mapdata import _tile_char
     assert _tile_char(0x25, 0) == "."
     assert _tile_char(0x30, 1) == "#"
-    assert _tile_char(0x2B, 0) == "o"
+    assert _tile_char(0x2B, 0) == "c"
+    assert _tile_char(0x30, 0) == "o"
 
 
 def test_run_path_uses_recorded_path(tmp_path):

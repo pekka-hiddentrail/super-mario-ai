@@ -31,7 +31,7 @@ class EnvConfig:
     levels: list = field(default_factory=lambda: ["YoshiIsland2"])
     frame_skip: int = 4
     radius: int = 6
-    inputs: str = "mixed"          # "mixed": one tile grid; "channels": solid/enemy/item grids + scalars
+    inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -39,9 +39,11 @@ class EnvConfig:
 
 def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
+    scalars = [("in_water", "scalar"), ("on_yoshi", "scalar"), ("powerup", "scalar")]
+    if cfg.inputs == "collect":
+        return [("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid")] + scalars
     if cfg.inputs == "channels":
-        return [("solid", "grid"), ("enemy", "grid"), ("item", "grid"),
-                ("in_water", "scalar"), ("on_yoshi", "scalar"), ("powerup", "scalar")]
+        return [("solid", "grid"), ("enemy", "grid"), ("item", "grid")] + scalars
     return [("tiles", "grid")]
 
 
@@ -52,10 +54,13 @@ def n_inputs(cfg):
 
 def build_observation(ram, state, cfg):
     """Flat int8 vector in input_layout order."""
-    if cfg.inputs == "channels":
-        enemy, item = R.sprite_grids(state, cfg.radius)
-        parts = [R.solid_grid(ram, state, cfg.radius).ravel(), enemy.ravel(), item.ravel(),
-                 np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8)]
+    if cfg.inputs in ("channels", "collect"):
+        collect = cfg.inputs == "collect"
+        enemy, item = R.sprite_grids(state, cfg.radius, legacy=not collect)
+        parts = [R.solid_grid(ram, state, cfg.radius).ravel(), enemy.ravel(), item.ravel()]
+        if collect:
+            parts.append(R.coin_grid(ram, state, cfg.radius).ravel())
+        parts.append(np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8))
         return np.concatenate(parts).astype(np.int8)
     return R.tile_grid(ram, state, cfg.radius).ravel()
 

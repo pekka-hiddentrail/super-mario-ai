@@ -12,6 +12,8 @@ def _tile_char(low, high):
         return "#"        # solid ground / blocks
     if high == 0 and low == 0x25:
         return "."        # empty sky
+    if high == 0 and low == R.COIN_TILE:
+        return "c"        # coin
     return "o"            # decoration, coins, ? blocks, pipes top etc.
 
 
@@ -20,7 +22,7 @@ def level_map(run_dir):
     run_dir = Path(run_dir)
     cfg = config.load(run_dir / "config.toml")
     level = cfg.env.levels[0]
-    cache = run_dir.parent / "_levels" / f"{level}.json"
+    cache = run_dir.parent / "_levels" / f"{level}.v2.json"     # v2: coins marked
     if cache.exists():
         return cache.read_text()
     train.use_config(cfg.env)

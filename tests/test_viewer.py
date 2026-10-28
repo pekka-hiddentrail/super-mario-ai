@@ -72,3 +72,21 @@ def test_run_reporter_is_picklable(tmp_path):
     from smwai.train import RunReporter
     reporter = RunReporter(tmp_path / "run", None, {"frames": 123})
     assert pickle.loads(pickle.dumps(reporter)).stats["frames"] == 123
+
+
+def test_tile_char_marks_big_coins_and_boxes():
+    from smwai.viewer.mapdata import _tile_char
+    assert _tile_char(0x2D, 0) == "Y" and _tile_char(0x2E, 0) == "Y"
+    assert _tile_char(0x24, 1) == "?" and _tile_char(0x26, 1) == "?"
+    assert _tile_char(0x32, 1) == "#"          # used block stays solid
+
+
+def test_run_path_returns_recorded_events(tmp_path):
+    from smwai.viewer.mapdata import run_path
+    best = tmp_path / "r" / "best"
+    best.mkdir(parents=True)
+    ev = [[10, "coin", 100, 300], [20, "block", 120, 290]]
+    (best / "gen_0001.json").write_text(json.dumps(
+        {"generation": 1, "fitness": 5.0, "max_x": 9, "cleared": True, "actions": [], "path": [[0, 1]], "events": ev}))
+    assert "events" not in run_path(tmp_path / "r", 1)
+    assert run_path(tmp_path / "r", 1, events=True)["events"] == ev

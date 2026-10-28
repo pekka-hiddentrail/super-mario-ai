@@ -27,6 +27,8 @@ class RewardConfig:
     speed_bonus: float = 0.0       # per (pixel/frame of rightward speed) per frame, i.e. rewards running
     clear_time_bonus: float = 0.0  # on clear: this * max(0, 1 - frames / clear_time_ref); faster = more
     clear_time_ref: float = 3000.0 # frames at which the clear-time bonus has shrunk to zero
+    yoshi_coin_bonus: float = 0.0  # per big (Yoshi) coin
+    block_bonus: float = 0.0       # per ? block hit (any block that turns into a used block)
 
 
 @dataclass
@@ -82,6 +84,7 @@ class SmwEnv(gym.Env):
         self._pad = None
         self.frame = None
         self.capture = None            # set to a list to collect every emulator frame (video)
+        self.events = []
 
     def _open(self, level):
         import stable_retro as retro  # Linux/WSL only; imported lazily so config/tests work anywhere
@@ -112,6 +115,7 @@ class SmwEnv(gym.Env):
         self.max_x = self.state.x
         self.frames = 0
         self.stuck = 0
+        self.events = []
         if self.capture is not None:
             self.capture.append(self.frame.copy())
         return grid, self._info()
@@ -141,8 +145,18 @@ class SmwEnv(gym.Env):
         else:
             self.stuck += self.cfg.frame_skip
         reward += rc.speed_bonus * max(0.0, self.state.x_speed / 16.0) * self.cfg.frame_skip
-        reward += rc.powerup_bonus * max(0, self.state.powerup - prev.powerup)
-        reward += rc.coin_bonus * max(0, self.state.coins - prev.coins)
+        gained = {"powerup": max(0, self.state.powerup - prev.powerup),
+                  "coin": max(0, self.state.coins - prev.coins),
+                  "yoshi": max(0, self.state.yoshi_coins - prev.yoshi_coins),
+                  "block": max(0, self.state.used_blocks - prev.used_blocks)}
+        weights = {"powerup": rc.powerup_bonus, "coin": rc.coin_bonus,
+                   "yoshi": rc.yoshi_coin_bonus, "block": rc.block_bonus}
+        for kind, n in gained.items():
+            if n:
+                reward += weights[kind] * n
+                self.events.append([self.frames, kind, self.state.x, self.state.y])
+                if weights[kind] > 0:
+                    self.stuck = 0          # collecting something worth reward counts as progress
         died = self.state.dying or self.state.lives < prev.lives
         cleared = self.state.level_cleared
         if died:
@@ -154,6 +168,8 @@ class SmwEnv(gym.Env):
         truncated = self.stuck >= self.cfg.stuck_frames or self.frames >= self.cfg.max_frames
         info = self._info()
         info.update(died=died, cleared=cleared)
+        if terminated or truncated:
+            info["events"] = list(self.events)      # [frame, kind, x, y] for the path map
         return grid, float(reward), terminated, truncated, info
 
     def render(self):

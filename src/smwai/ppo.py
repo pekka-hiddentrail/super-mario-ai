@@ -120,6 +120,7 @@ def train_ppo(cfg, config_path, run_dir=None, steps=None, n_envs=None):
             (run_dir / "best" / f"gen_{n:04d}.json").write_text(json.dumps({
                 "generation": n, "fitness": ret, "max_x": info["max_x"], "cleared": info["cleared"],
                 "buttons": BUTTONS, "actions": masks, "path": info["path"],
+                "events": info.get("events", []),
                 "timesteps": self.num_timesteps}))
             if ret > self.best:
                 self.best = ret

@@ -7,11 +7,11 @@
 <style>
   :root {
     --bg: #14161a; --panel: #1d2026; --text: #e6e8ec; --muted: #8b93a1; --line: #2c313a;
-    --accent: #5aa9ff; --best: #f2994a; --coin: #f2cc60; --solid: #5b6573; --deco: #2f3640; --sky: #181b20; --bad: #f85149;
+    --accent: #5aa9ff; --best: #f2994a; --coin: #f2cc60; --box: #e8833a; --item: #bc8cff; --solid: #5b6573; --deco: #2f3640; --sky: #181b20; --bad: #f85149;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg: #f4f5f7; --panel: #fff; --text: #1b1f24; --muted: #5b6573; --line: #d5d9e0;
-            --accent: #0b4fa8; --best: #c2410c; --coin: #b08800; --solid: #6b7280; --deco: #d9dde4; --sky: #eef1f5; --bad: #cf222e; }
+            --accent: #0b4fa8; --best: #c2410c; --coin: #b08800; --box: #c2410c; --item: #8250df; --solid: #6b7280; --deco: #d9dde4; --sky: #eef1f5; --bad: #cf222e; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
@@ -55,7 +55,9 @@
   <div id="wrap"><canvas id="map" width="800" height="200"></canvas></div>
   <div class="legend">
     <span><i class="sw" style="background:var(--solid)"></i>solid tile</span>
-    <span><i class="sw" style="background:var(--coin)"></i>coin</span>
+    <span><i class="sw" style="background:var(--coin)"></i>coin (dot) / big coin (outlined block)</span>
+    <span><i class="sw" style="background:var(--box)"></i>box with something in it</span>
+    <span>on the best run: dot = coin picked up, ring = big coin, triangle = power-up, diamond = box hit</span>
     <span><i class="sw" style="background:var(--deco)"></i>other tile (blocks, decoration)</span>
     <span><i class="sw" style="background:var(--accent)"></i>run path - darker = higher fitness, lighter = lower</span>
     <span><i class="sw" style="background:var(--best)"></i>best run</span>
@@ -67,7 +69,7 @@
 const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const cv = $('map'), ctx = cv.getContext('2d');
-let runs = [], level = null, paths = [];
+let runs = [], level = null, paths = [], events = [];
 
 async function init() {
   runs = await (await fetch('/api/runs')).json();
@@ -89,7 +91,7 @@ async function load() {
   if (!r) { $('status').textContent = 'no runs with recorded generations yet'; return; }
   const gens = r.gens.filter(g => g.gen >= +$('from').value && g.gen <= +$('to').value
                                   && (g.gen - +$('from').value) % +$('step').value === 0);
-  $('load').disabled = false; paths = []; level = null; $('rows').innerHTML = '';
+  $('load').disabled = false; paths = []; events = []; level = null; $('rows').innerHTML = '';
   cv.width = 800; cv.height = 60; ctx.clearRect(0, 0, 800, 60);
   ctx.fillStyle = css('--muted'); ctx.font = '14px system-ui'; ctx.fillText('Loading level map...', 12, 34);
   try {
@@ -106,6 +108,7 @@ async function load() {
       paths.push(p); redraw();
     }
     $('status').textContent = `${paths.length} runs`;
+    await loadEvents(run, token);
   } catch (e) { $('status').textContent = 'error: ' + e.message; }
   if (token === loadToken) $('load').disabled = false;
 }
@@ -117,8 +120,18 @@ function redraw() {
   if ($('tiles').checked) {
     level.rows.forEach((row, y) => { for (let x = 0; x < cols; x++) {
       const c = row[x]; if (c === '.') continue;
-      ctx.fillStyle = c === '#' ? css('--solid') : c === 'c' ? css('--coin') : css('--deco');
-      ctx.fillRect(x * t, y * t, t, t);
+      if (c === 'c') {                                   // coin: small dot
+        ctx.fillStyle = css('--coin'); ctx.beginPath(); ctx.arc((x + 0.5) * t, (y + 0.5) * t, Math.max(1.5, t * 0.3), 0, 7); ctx.fill();
+      } else if (c === 'Y') {                            // big coin: full gold block with outline
+        ctx.fillStyle = css('--coin'); ctx.fillRect(x * t, y * t, t, t);
+        ctx.strokeStyle = css('--text'); ctx.lineWidth = 1; ctx.strokeRect(x * t + 0.5, y * t + 0.5, t - 1, t - 1);
+      } else if (c === '?') {                            // box with something in it
+        ctx.fillStyle = css('--box'); ctx.fillRect(x * t, y * t, t, t);
+        ctx.strokeStyle = css('--text'); ctx.lineWidth = 1; ctx.strokeRect(x * t + 0.5, y * t + 0.5, t - 1, t - 1);
+      } else {
+        ctx.fillStyle = c === '#' ? css('--solid') : css('--deco');
+        ctx.fillRect(x * t, y * t, t, t);
+      }
     } });
   }
   const fits = paths.map(p => p.fitness), lo = Math.min(...fits), hi = Math.max(...fits);
@@ -139,8 +152,36 @@ function redraw() {
     }
   });
   ctx.globalAlpha = 1;
-  $('rows').innerHTML = [...paths].sort((a, b) => b.fitness - a.fitness).map(p =>
+  drawEvents(t);
+  $('rows').innerHTML =[...paths].sort((a, b) => b.fitness - a.fitness).map(p =>
     `<tr><td>${p.generation}</td><td>${p.fitness.toFixed(0)}</td><td>${p.max_x}</td><td>${p.cleared ? 'cleared' : 'ended'}</td></tr>`).join('');
+}
+// What the best run collected: small dot = coin, ring = big coin, triangle = power-up, diamond = box hit.
+function drawEvents(t) {
+  if (!events.length) return;
+  events.forEach(([frame, kind, x, y]) => {
+    const px = (x / 16 + 0.5) * t, py = (y / 16 + 0.5) * t, r = Math.max(3, t * 0.6);
+    ctx.lineWidth = 1.5; ctx.strokeStyle = css('--text');
+    ctx.beginPath();
+    if (kind === 'coin') { ctx.fillStyle = css('--coin'); ctx.arc(px, py, r * 0.8, 0, 7); }
+    else if (kind === 'yoshi') { ctx.fillStyle = 'transparent'; ctx.arc(px, py, r * 1.6, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = css('--coin'); }
+    else if (kind === 'powerup') { ctx.fillStyle = css('--item'); ctx.moveTo(px, py - r * 1.3); ctx.lineTo(px + r * 1.2, py + r); ctx.lineTo(px - r * 1.2, py + r); ctx.closePath(); }
+    else { ctx.fillStyle = css('--box'); ctx.moveTo(px, py - r * 1.2); ctx.lineTo(px + r * 1.2, py); ctx.lineTo(px, py + r * 1.2); ctx.lineTo(px - r * 1.2, py); ctx.closePath(); }
+    if (kind !== 'yoshi') ctx.fill();
+    ctx.stroke();
+  });
+}
+async function loadEvents(run, token) {        // events of the best run, replayed once if it was recorded without them
+  if (!paths.length) return;
+  const best = paths.reduce((a, b) => (b.fitness > a.fitness ? b : a));
+  $('status').textContent = `${paths.length} runs; loading what generation ${best.generation} collected...`;
+  const p = await (await fetch(`/api/path?run=${encodeURIComponent(run)}&gen=${best.generation}&events=1`)).json();
+  if (token !== loadToken || p.error) return;
+  events = p.events || [];
+  const n = k => events.filter(e => e[1] === k).length;
+  $('status').textContent = `${paths.length} runs; best run (gen ${best.generation}) collected ${n('coin')} coins, ` +
+    `${n('yoshi')} big coins, ${n('powerup')} power-ups, hit ${n('block')} boxes`;
+  redraw();
 }
 $('load').onclick = load; $('zoom').onchange = redraw; $('tiles').onchange = redraw;
 init();

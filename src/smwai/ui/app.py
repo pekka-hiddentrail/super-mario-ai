@@ -109,6 +109,7 @@ def param_inputs(raw, live_mode, prefix):
         for key, label in [("progress", "Per pixel of progress"), ("clear_bonus", "Clear bonus"),
                            ("time_penalty", "Penalty per frame"), ("death_penalty", "Death penalty"),
                            ("powerup_bonus", "Power-up bonus"), ("coin_bonus", "Coin bonus"),
+                           ("yoshi_coin_bonus", "Big (Yoshi) coin bonus"), ("block_bonus", "Box hit bonus"),
                            ("speed_bonus", "Speed bonus (per px/frame running)"),
                            ("clear_time_bonus", "Fast-clear bonus (shrinks with time)"),
                            ("clear_time_ref", "...reaches zero at N frames")]:

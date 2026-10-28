@@ -7,7 +7,8 @@ from pathlib import Path
 ENV_KEYS = {"stuck_frames": int, "max_frames": int}
 REWARD_KEYS = {"progress": float, "clear_bonus": float, "time_penalty": float,
                "death_penalty": float, "powerup_bonus": float, "coin_bonus": float,
-               "speed_bonus": float, "clear_time_bonus": float, "clear_time_ref": float}
+               "speed_bonus": float, "clear_time_bonus": float, "clear_time_ref": float,
+               "yoshi_coin_bonus": float, "block_bonus": float}
 # override key -> (section of neat.Config, attribute, type)
 NEAT_KEYS = {
     "conn_add_prob": ("genome_config", float), "conn_delete_prob": ("genome_config", float),

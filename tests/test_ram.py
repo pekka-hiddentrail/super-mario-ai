@@ -116,3 +116,16 @@ def test_x_speed_is_signed():
     assert R.read_state(w).x_speed == 0x30
     w[R.PLAYER_X_SPEED] = 0xF0
     assert R.read_state(w).x_speed == -16
+
+
+def test_used_blocks_and_yoshi_coins():
+    w = make_wram()
+    w[0x5D] = 2                                   # two screens loaded
+    for i in (3, 500):                            # two used-block tiles (Map16 0x132)
+        w[R.MAP16_HIGH + i] = 1
+        w[R.MAP16_LOW + i] = R.USED_BLOCK
+    w[R.MAP16_HIGH + 7] = 1                       # a solid tile that is not a used block
+    w[R.MAP16_LOW + 7] = 0x30
+    w[R.YOSHI_COINS] = 2
+    st = R.read_state(w)
+    assert st.used_blocks == 2 and st.yoshi_coins == 2

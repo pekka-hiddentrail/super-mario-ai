@@ -76,6 +76,13 @@ NEAT_DEFAULTS = dict(
     survival_threshold=0.2, elitism=2, min_species_size=2)
 
 
+ADAPT_DEFAULTS = dict(
+    enabled=False,          # adaptive mutation: mutate harder while the best fitness is stalled
+    stall_generations=5,    # generations without a new best before boosting
+    power_factor=2.0,       # weight_mutate_power multiplier while boosted
+    structure_factor=1.5,   # conn_add_prob / node_add_prob multiplier while boosted
+    rate_add=0.1)           # added to weight_mutate_rate while boosted (capped at 1)
+
 PPO_DEFAULTS = dict(
     total_steps=500_000, n_envs=8, n_steps=256, batch_size=512, n_epochs=4, learning_rate=3e-4,
     gamma=0.99, ent_coef=0.01, clip_range=0.2, reward_scale=0.01, eval_every=20_480,
@@ -93,6 +100,7 @@ class RunConfig:
     neat: dict
     seed: int = None
     ppo: dict = None
+    adapt: dict = None
 
     @property
     def n_inputs(self):
@@ -134,4 +142,4 @@ def load(path):
         generations=train.get("generations", 100), workers=train.get("workers", 4),
         checkpoint_every=train.get("checkpoint_every", 5), runs_dir=train.get("runs_dir", "runs"),
         neat={**NEAT_DEFAULTS, **raw.get("neat", {})}, seed=train.get("seed"),
-        ppo={**PPO_DEFAULTS, **raw.get("ppo", {})})
+        ppo={**PPO_DEFAULTS, **raw.get("ppo", {})}, adapt={**ADAPT_DEFAULTS, **raw.get("adapt", {})})

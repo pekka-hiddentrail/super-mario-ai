@@ -104,7 +104,8 @@ def make_handler(runs_dir):
                         if url.path == "/api/level":
                             self._send(level_map(runs_dir / name))
                         else:
-                            self._send(json.dumps(run_path(runs_dir / name, int(q["gen"][0]))))
+                            self._send(json.dumps(run_path(runs_dir / name, int(q["gen"][0]),
+                                                           events="events" in q)))
                 elif url.path == "/api/replay":
                     name, gen = q["run"][0], int(q["gen"][0])
                     if not _NAME.match(name) or not (runs_dir / name).is_dir():

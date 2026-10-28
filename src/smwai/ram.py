@@ -17,6 +17,8 @@ GAME_MODE = 0x100          # 0x14 = in level
 LIVES = 0x0DBE
 COINS = 0x0DBF
 PLAYER_X_SPEED = 0x7B      # signed 8-bit, 1/16 pixel per frame
+YOSHI_COINS = 0x1420       # big (Yoshi/dragon) coins collected in this level
+USED_BLOCK = 0x32          # Map16 0x132: a ? block that has been hit (count rises when one is hit)
 IN_WATER = 0x75            # player is in water
 ON_YOSHI = 0x187A          # riding Yoshi
 END_LEVEL_TIMER = 0x1493   # non-zero once the goal is hit
@@ -73,6 +75,8 @@ class MarioState:
     in_water: bool = False
     on_yoshi: bool = False
     x_speed: int = 0            # signed, 1/16 pixel per frame (positive = right)
+    yoshi_coins: int = 0
+    used_blocks: int = 0        # number of already-hit blocks in the level (rises on every block hit)
     sprites: list = field(default_factory=list)
 
 
@@ -97,6 +101,13 @@ def read_sprites(ram):
     return sprites
 
 
+def used_block_count(ram):
+    """How many Map16 'used block' tiles the loaded level currently has."""
+    n = u8(ram, 0x5D) * TILES_PER_PAGE
+    high, low = ram[MAP16_HIGH:MAP16_HIGH + n], ram[MAP16_LOW:MAP16_LOW + n]
+    return int(np.count_nonzero((high == 1) & (low == USED_BLOCK)))
+
+
 def read_state(ram):
     x, y = s16(ram, PLAYER_X), s16(ram, PLAYER_Y)
     return MarioState(
@@ -108,6 +119,7 @@ def read_state(ram):
         in_level=u8(ram, GAME_MODE) == 0x14,
         in_water=u8(ram, IN_WATER) != 0,
         on_yoshi=u8(ram, ON_YOSHI) != 0,
+        yoshi_coins=u8(ram, YOSHI_COINS), used_blocks=used_block_count(ram),
         x_speed=u8(ram, PLAYER_X_SPEED) - 256 if u8(ram, PLAYER_X_SPEED) > 127 else u8(ram, PLAYER_X_SPEED),
         sprites=read_sprites(ram))
 

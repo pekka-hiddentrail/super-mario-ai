@@ -128,9 +128,11 @@ class PoolEvaluator:
 class RunReporter(neat.reporting.BaseReporter):
     """Writes metrics.csv and records the best run of every generation."""
 
-    def __init__(self, run_dir, neat_cfg, stats=None):
+    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None):
         self.dir = Path(run_dir)
         self.neat_cfg = neat_cfg
+        self.adapt = adapt or {}
+        self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
         self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
         self.applied = None
         (self.dir / "best").mkdir(parents=True, exist_ok=True)
@@ -165,9 +167,38 @@ class RunReporter(neat.reporting.BaseReporter):
                 f.write(json.dumps({"generation": self.generation, "changed": changed}) + "\n")
             print(f"gen {self.generation}: applied live changes {changed}", flush=True)
 
+    def _adapt_mutation(self, best_fitness):
+        """When the best fitness stops improving, mutate harder until it improves again."""
+        a = self.adapt
+        if not a.get("enabled"):
+            return
+        if best_fitness > self.adapt_best + 1e-9:
+            self.adapt_best, self.stall = best_fitness, 0
+        else:
+            self.stall += 1
+        change, kind = None, None
+        if self.stall >= a["stall_generations"] and not self.boosted:
+            g = self.neat_cfg.genome_config
+            self.adapt_base = {k: getattr(g, k) for k in
+                               ("weight_mutate_power", "conn_add_prob", "node_add_prob", "weight_mutate_rate")}
+            b = self.adapt_base
+            change = {"weight_mutate_power": b["weight_mutate_power"] * a["power_factor"],
+                      "conn_add_prob": min(1.0, b["conn_add_prob"] * a["structure_factor"]),
+                      "node_add_prob": min(1.0, b["node_add_prob"] * a["structure_factor"]),
+                      "weight_mutate_rate": min(1.0, b["weight_mutate_rate"] + a["rate_add"])}
+            self.boosted, kind = True, "boost"
+        elif self.stall == 0 and self.boosted:
+            change, self.boosted, kind = dict(self.adapt_base), False, "restore"
+        if change:
+            live.apply_neat(self.neat_cfg, {"neat": change})
+            with open(self.dir / "events.jsonl", "a") as f:
+                f.write(json.dumps({"generation": self.generation, "adaptive": kind, "changed": change}) + "\n")
+            print(f"gen {self.generation}: adaptive mutation {kind} (stalled {self.stall} generations)", flush=True)
+
     def post_evaluate(self, config, population, species, best_genome):
         fits = [g.fitness for g in population.values()]
         best = max(population.values(), key=lambda g: g.fitness)
+        self._adapt_mutation(best.fitness)
         reward, actions, info = run_episode(best, config, record=True)
         deterministic = abs(reward - best.fitness) < 1e-6
         stem = self.dir / "best" / f"gen_{self.generation:04d}"
@@ -176,7 +207,7 @@ class RunReporter(neat.reporting.BaseReporter):
         stem.with_suffix(".json").write_text(json.dumps({
             "generation": self.generation, "fitness": best.fitness, "max_x": info["max_x"],
             "cleared": info["cleared"], "buttons": BUTTONS, "actions": actions,
-            "path": info["path"]}))
+            "path": info["path"], "events": info.get("events", [])}))
         if best.fitness > self.best_ever:
             self.best_ever = best.fitness
             with open(self.dir / "best_ever.pkl", "wb") as f:
@@ -218,7 +249,7 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
     # the pool must fork before this process creates its own emulator
     stats = {"frames": 0}
     evaluator = PoolEvaluator(n_workers, stats)
-    pop.add_reporter(RunReporter(run_dir, pop.config, stats))
+    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt))
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:

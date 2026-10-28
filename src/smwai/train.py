@@ -2,6 +2,7 @@
 import json
 import os
 import pickle
+import random
 import shutil
 import time
 from pathlib import Path
@@ -156,6 +157,8 @@ class RunReporter(neat.reporting.BaseReporter):
 def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers=None):
     global _ENV_CFG
     _ENV_CFG = cfg.env
+    if cfg.seed is not None:
+        random.seed(cfg.seed)          # neat-python uses the global random module
     if resume:
         run_dir = Path(resume).parent
     else:

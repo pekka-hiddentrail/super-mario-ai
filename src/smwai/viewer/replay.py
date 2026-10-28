@@ -77,6 +77,7 @@ def compute_replay(run_dir, generation, use_cache=True):
         "generation": generation, "fitness": total, "max_x": info["max_x"],
         "cleared": bool(info.get("cleared")), "died": bool(info.get("died")),
         "buttons": BUTTONS, "radius": cfg.env.radius, "watch": watch, "graph": graph,
+        "layout": [{"name": n, "kind": k} for n, k in env.layout],
         "steps": steps})
     cache.parent.mkdir(exist_ok=True)
     cache.write_text(result)

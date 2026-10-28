@@ -31,9 +31,33 @@ class EnvConfig:
     levels: list = field(default_factory=lambda: ["YoshiIsland2"])
     frame_skip: int = 4
     radius: int = 6
-    stuck_frames: int = 120        # no new max x for this many frames -> truncate
+    inputs: str = "mixed"          # "mixed": one tile grid; "channels": solid/enemy/item grids + scalars
+    stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
+
+
+def input_layout(cfg):
+    """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
+    if cfg.inputs == "channels":
+        return [("solid", "grid"), ("enemy", "grid"), ("item", "grid"),
+                ("in_water", "scalar"), ("on_yoshi", "scalar"), ("powerup", "scalar")]
+    return [("tiles", "grid")]
+
+
+def n_inputs(cfg):
+    cells = (cfg.radius * 2 + 1) ** 2
+    return sum(cells if kind == "grid" else 1 for _, kind in input_layout(cfg))
+
+
+def build_observation(ram, state, cfg):
+    """Flat int8 vector in input_layout order."""
+    if cfg.inputs == "channels":
+        enemy, item = R.sprite_grids(state, cfg.radius)
+        parts = [R.solid_grid(ram, state, cfg.radius).ravel(), enemy.ravel(), item.ravel(),
+                 np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8)]
+        return np.concatenate(parts).astype(np.int8)
+    return R.tile_grid(ram, state, cfg.radius).ravel()
 
 
 class SmwEnv(gym.Env):
@@ -42,8 +66,8 @@ class SmwEnv(gym.Env):
     def __init__(self, config=None, render_mode=None):
         self.cfg = config or EnvConfig()
         self.render_mode = render_mode
-        size = self.cfg.radius * 2 + 1
-        self.observation_space = spaces.Box(-1, 2, (size, size), dtype=np.int8)
+        self.layout = input_layout(self.cfg)
+        self.observation_space = spaces.Box(-1, 3, (n_inputs(self.cfg),), dtype=np.int8)
         self.action_space = spaces.MultiBinary(len(BUTTONS))
         self._env = None
         self._level = None
@@ -66,7 +90,7 @@ class SmwEnv(gym.Env):
     def _read(self):
         ram = R.wram(self._env.unwrapped.get_ram())
         st = R.read_state(ram)
-        return st, R.tile_grid(ram, st, self.cfg.radius)
+        return st, build_observation(ram, st, self.cfg)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)

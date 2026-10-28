@@ -3,7 +3,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from .env import BUTTONS, EnvConfig, RewardConfig
+from .env import BUTTONS, EnvConfig, RewardConfig, n_inputs
 
 NEAT_TEMPLATE = """\
 [NEAT]
@@ -85,10 +85,11 @@ class RunConfig:
     checkpoint_every: int
     runs_dir: str
     neat: dict
+    seed: int = None
 
     @property
     def n_inputs(self):
-        return (self.env.radius * 2 + 1) ** 2
+        return n_inputs(self.env)
 
     def neat_text(self):
         return NEAT_TEMPLATE.format(n_inputs=self.n_inputs, n_outputs=len(BUTTONS), **self.neat)
@@ -125,4 +126,4 @@ def load(path):
         name=raw.get("name", "run"), env=env,
         generations=train.get("generations", 100), workers=train.get("workers", 4),
         checkpoint_every=train.get("checkpoint_every", 5), runs_dir=train.get("runs_dir", "runs"),
-        neat={**NEAT_DEFAULTS, **raw.get("neat", {})})
+        neat={**NEAT_DEFAULTS, **raw.get("neat", {})}, seed=train.get("seed"))

@@ -53,3 +53,29 @@ def test_tile_grid_solid_row_and_sprites():
     assert (grid[8] == R.SOLID).all()
     assert grid[6, 7] == R.ENEMY
     assert grid[6, 5] == R.ITEM
+
+
+def test_channels_split_matches_mixed_grid():
+    w = make_wram()
+    put16(w, R.PLAYER_X, 160)
+    put16(w, R.PLAYER_Y, 352)
+    for tx in range(0, 40):
+        w[R.MAP16_HIGH + (tx // 16) * R.TILES_PER_PAGE + 24 * 16 + tx % 16] = 1
+    w[R.SPRITE_STATUS] = 8
+    w[R.SPRITE_NUMBER] = 0x10
+    w[R.SPRITE_X_LO], w[R.SPRITE_X_HI] = (160 + 16) & 0xFF, 0
+    w[R.SPRITE_Y_LO], w[R.SPRITE_Y_HI] = 352 & 0xFF, 352 >> 8
+    st = R.read_state(w)
+    solid = R.solid_grid(w, st)
+    enemy, item = R.sprite_grids(st)
+    assert solid[8].all() and enemy[6, 7] == 1 and item.sum() == 0
+    mixed = R.tile_grid(w, st)
+    assert mixed[6, 7] == R.ENEMY and (mixed[8] == R.SOLID).all()
+
+
+def test_water_and_yoshi_flags():
+    w = make_wram()
+    w[R.IN_WATER] = 1
+    w[R.ON_YOSHI] = 2
+    st = R.read_state(w)
+    assert st.in_water and st.on_yoshi

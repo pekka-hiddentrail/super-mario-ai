@@ -16,6 +16,8 @@ PLAYER_STATE = 0x71        # 9 = dying, 0 = normal
 GAME_MODE = 0x100          # 0x14 = in level
 LIVES = 0x0DBE
 COINS = 0x0DBF
+IN_WATER = 0x75            # player is in water
+ON_YOSHI = 0x187A          # riding Yoshi
 END_LEVEL_TIMER = 0x1493   # non-zero once the goal is hit
 SPRITE_STATUS = 0x14C8     # 12 slots, 0 = empty
 SPRITE_NUMBER = 0x9E
@@ -63,6 +65,8 @@ class MarioState:
     dying: bool
     level_cleared: bool
     in_level: bool
+    in_water: bool = False
+    on_yoshi: bool = False
     sprites: list = field(default_factory=list)
 
 
@@ -95,6 +99,8 @@ def read_state(ram):
         dying=u8(ram, PLAYER_STATE) == 9,
         level_cleared=u8(ram, END_LEVEL_TIMER) != 0,
         in_level=u8(ram, GAME_MODE) == 0x14,
+        in_water=u8(ram, IN_WATER) != 0,
+        on_yoshi=u8(ram, ON_YOSHI) != 0,
         sprites=read_sprites(ram))
 
 
@@ -102,8 +108,8 @@ def read_state(ram):
 EMPTY, SOLID, ENEMY, ITEM = 0, 1, -1, 2
 
 
-def tile_grid(ram, state, radius=6):
-    """(2r+1, 2r+1) int8 grid centred on Mario: 1 solid, -1 enemy, 2 power-up, 0 empty."""
+def solid_grid(ram, state, radius=6):
+    """(2r+1, 2r+1) int8 grid centred on Mario: 1 where the Map16 tile is solid."""
     size = radius * 2 + 1
     grid = np.zeros((size, size), dtype=np.int8)
     for row, dy in enumerate(range(-radius * 16, radius * 16 + 1, 16)):
@@ -115,9 +121,26 @@ def tile_grid(ram, state, radius=6):
             idx = MAP16_HIGH + (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
             if idx < len(ram) and ram[idx] == 1:
                 grid[row, col] = SOLID
+    return grid
+
+
+def sprite_grids(state, radius=6):
+    """(enemy, item) int8 grids centred on Mario with 1 where such a sprite is."""
+    size = radius * 2 + 1
+    enemy = np.zeros((size, size), dtype=np.int8)
+    item = np.zeros((size, size), dtype=np.int8)
     for sp in state.sprites:
         col = round((sp.x - state.x) / 16) + radius
         row = round((sp.y - state.y) / 16) + radius
         if 0 <= row < size and 0 <= col < size:
-            grid[row, col] = ITEM if sp.is_item else ENEMY
+            (item if sp.is_item else enemy)[row, col] = 1
+    return enemy, item
+
+
+def tile_grid(ram, state, radius=6):
+    """Mixed grid: 1 solid, -1 enemy, 2 power-up, 0 empty (sprites overwrite tiles)."""
+    grid = solid_grid(ram, state, radius)
+    enemy, item = sprite_grids(state, radius)
+    grid[enemy == 1] = ENEMY
+    grid[item == 1] = ITEM
     return grid

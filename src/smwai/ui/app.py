@@ -92,6 +92,12 @@ def param_inputs(raw, live_mode, prefix):
             workers = st.number_input("Parallel emulators", 1, 32, int(workers), key=prefix + "workers")
             raw["neat"]["pop_size"] = st.number_input("Population", 10, 2000, int(raw["neat"]["pop_size"]),
                                                       key=prefix + "pop")
+        if not live_mode:
+            modes = ["mixed", "channels"]
+            raw["env"]["inputs"] = st.selectbox("Network inputs", modes, key=prefix + "inputs",
+                                                index=modes.index(raw["env"].get("inputs", "mixed")),
+                                                help="mixed: one tile grid. channels: separate solid / enemy / "
+                                                     "item grids plus water, Yoshi and power-up.")
         raw["env"]["stuck_frames"] = st.number_input("Give up after N frames without progress", 30, 2000,
                                                       int(raw["env"]["stuck_frames"]), key=prefix + "stuck")
     with c2:

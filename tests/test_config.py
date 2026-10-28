@@ -29,3 +29,9 @@ def test_dump_roundtrip(tmp_path):
     again = config.load_raw(out)
     assert again == raw
     assert config.load(out).env.reward.time_penalty == 0.25
+
+
+def test_input_counts_by_mode():
+    from smwai.env import EnvConfig, n_inputs
+    assert n_inputs(EnvConfig()) == 169
+    assert n_inputs(EnvConfig(inputs="channels")) == 169 * 3 + 3

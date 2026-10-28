@@ -20,8 +20,10 @@ PLAYER_X_SPEED = 0x7B      # signed 8-bit, 1/16 pixel per frame
 PLAYER_Y_SPEED = 0x7D      # signed 8-bit, 1/16 pixel per frame (positive = down)
 IN_AIR = 0x72              # non-zero while Mario is in the air
 PIPE_TIMER = 0x88          # counts down while Mario goes into (or comes out of) a pipe
-PIPE_ACTION = 0x89         # 3 = entering a pipe downward, 7 = coming out of a ceiling pipe (measured on Yoshi Island 2)
+PIPE_ACTION = 0x89         # entering: 1 sideways right, 3 downward; coming out: 5, 7 (measured on Yoshi Island 2 and 4)
 PIPE_DOWN = 3
+PIPE_ENTER = (1, 2, 3, 4)   # entering a pipe. Measured: 3 = downward, 1 = sideways to the right (Yoshi Island 4, x 2723); 2 and 4 assumed
+                            # (left, up). Coming out: 5 (sideways) and 7 (downward) were measured and are never paid.
 ROOMS = 0x141A             # increments every time a new room is entered through a pipe or door
 YOSHI_COINS = 0x1420       # big (Yoshi/dragon) coins collected in this level
 BONUS_STARS = 0x1900       # bonus stars won at the goal bar (read on the clear step, before the tally counts it down)

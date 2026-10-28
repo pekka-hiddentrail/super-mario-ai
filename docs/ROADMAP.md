@@ -21,9 +21,9 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 - Reward terms (all in the config): progress, clear bonus, time penalty, death penalty, power-up bonus,
   coin bonus, **big (Yoshi) coin bonus**, **box-hit bonus**, **speed bonus** (rightward speed, from `$7B`),
   **fast-clear bonus** (shrinks with frames), **goal bar bonus** (per bonus star; the game records how high the bar was hit in `$1900`), **climb bonus** (`height_bonus`: per pixel of
-  new standing height, i.e. landing on something higher than ever before) and **pipe bonus** (`pipe_bonus`: entering a pipe downward, once per
-  pipe per episode; pipe entry = pipe timer `$88` starting with action `$89` = 3, verified on the pipe at x 3878 of Yoshi's Island 2;
-  coming out of the other side is action 7 and pays nothing). Collecting something worth reward resets the stuck timer, so going back for it is possible.
+  new standing height, i.e. landing on something higher than ever before) and **pipe bonus** (`pipe_bonus`: entering a pipe, once per pipe per
+  episode; pipe entry = pipe timer `$88` starting with action `$89` in 1-4: 3 = downward (Yoshi's Island 2, x 3878) and 1 = sideways
+  right (Yoshi's Island 4, x 2723) are measured, 2 and 4 are assumed; coming out is 5 or 7 and pays nothing). Collecting something worth reward resets the stuck timer, so going back for it is possible.
 - Collection **events** (coin, big coin, power-up, box hit with position and frame) are recorded with every best run.
 - Verified in game memory: coin = Map16 `0x2B`; big coin = pair `0x2D`/`0x2E` (counter `$1420`); a hit box turns into the
   used-block tile `0x132` (box tiles seen: `0x124`, `0x126`). Other box types are not yet verified.
@@ -85,6 +85,11 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   **Result on Yoshi's Island 1** (seeds 3-7, same settings as the symmetric runs): mean best x 3690 against 2990; better on 4 of 5 seeds
   (+1788, +243, +192, +2794), worse on 1 (-1515); no clear in either. Encouraging but not proven at 5 seeds. Test on the gap levels
   (Yoshi's Island 3 and 4, `configs/experiments/gaps_yi34.toml`) is running.
+- **Gap levels** (jump inputs against collect+adaptive baseline, seeds 1-3, 15 generations, population 60): Yoshi's Island 3 mean best x
+  545 (physics) vs 546 (baseline): no difference, every one of the 6 runs stalls at x 540-550 where a chasm has to be crossed to a ledge
+  higher than the takeoff. Yoshi's Island 4: 2793 vs 2609 (physics reached the plateau on 3 of 3 seeds, baseline on 2 of 3).
+  On Yoshi's Island 4 the plateau (x ~2793) is caused by the way on being a **sideways pipe** at x ~2723, which the runs jump over.
+  Pipes can be mandatory path elements, not only bonuses.
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits

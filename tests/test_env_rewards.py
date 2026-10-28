@@ -35,3 +35,24 @@ def test_no_pipe_reward_when_bonus_is_zero():
     rewards = _run_pattern(env, 14, 5)
     assert max(rewards) < 1000                                      # the event is recorded but pays nothing
     assert any(e[1] == "pipe" for e in env.events)
+
+
+def test_sideways_pipe_on_yoshi_island_4_pays_once():
+    from smwai.env import EnvConfig as Cfg
+    env = SmwEnv(Cfg(levels=["YoshiIsland4"], stuck_frames=900, reward=RewardConfig(pipe_bonus=100000.0)))
+    env.reset()
+    for _ in range(0):
+        pass
+    # run right with hops until the pipe at x ~2723 is entered (recorded runs pass it at ground level)
+    rewards = []
+    for t in range(1500):
+        a = np.zeros(len(BUTTONS), dtype=bool)
+        a[BUTTONS.index("RIGHT")] = a[BUTTONS.index("Y")] = True
+        a[BUTTONS.index("B")] = (t % 14) < 3
+        _, r, term, trunc, info = env.step(a)
+        rewards.append(r)
+        if term or trunc:
+            break
+    pipes = [e for e in env.events if e[1] == "pipe"]
+    assert len(pipes) <= 1
+    assert sum(r > 50000 for r in rewards) == len(pipes)

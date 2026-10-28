@@ -32,7 +32,7 @@ class RewardConfig:
     block_bonus: float = 0.0       # per ? block hit (any block that turns into a used block)
     goal_bar_bonus: float = 0.0    # per bonus star won at the goal bar: hitting the bar higher pays more
     height_bonus: float = 0.0      # per pixel of new standing height: landing on something higher than ever before
-    pipe_bonus: float = 0.0         # per pipe entered downward (each pipe pays once per episode)
+    pipe_bonus: float = 0.0         # per pipe entered, down or sideways (each pipe pays once per episode)
 
 
 @dataclass
@@ -180,7 +180,7 @@ class SmwEnv(gym.Env):
                 if weights[kind] > 0:
                     self.stuck = 0          # collecting something worth reward counts as progress
         st = self.state
-        if prev.pipe_timer == 0 and st.pipe_timer > 0 and st.pipe_action == R.PIPE_DOWN:
+        if prev.pipe_timer == 0 and st.pipe_timer > 0 and st.pipe_action in R.PIPE_ENTER:
             key = (st.rooms, st.x // 16, st.y // 16)          # one payment per pipe, so going back and forth is no farm
             if key not in self._pipes:
                 self._pipes.add(key)

@@ -72,6 +72,13 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   generation 23; seed 4 cleared at generation 9 (about 238,000 frames); seed 2 reached x 4169 and seed 3 x 3554 without clearing.
   So 2 of 4 seeds cleared and 3 of 4 got clearly past the old plateau (x ~3550). There is no no-boost baseline of the same size
   yet (the earlier no-boost runs were population 100 with other inputs and one seed: x 3538 / 3661).
+- **Shifted view window** (`window = [4, 8, 4, 8]`: 8 tiles ahead and 8 below, same 169 cells per grid; collect inputs + adaptive mutation,
+  seeds 3-7, population 50, 14 generations): mean best x 2583 against 2990 for the symmetric window; better on 3 seeds (+734, +122, +96),
+  worse on 2 (-1760, -1225), no clear. No evidence that the taller window helps; the seed noise is larger than the effect. The symmetric
+  runs on seeds 3-5 reproduced the earlier numbers exactly (2808 / 3674 / 3432), confirming runs are deterministic per seed.
+- **Jump options as inputs** (`inputs = "physics"`, built; `jumpview.py`): from the measured jump formula, per jump (A/B held 1/10/25 frames)
+  land-or-pit, enemy on the arc, coins, landing offset. Checked against the emulator on 216 jumps: land-or-pit right 97%, landing within
+  one tile 65%. B jumps harder than A (takeoff 77..90 vs 71..82). Test on Yoshi's Island 1 (seeds 3-7) queued/running; result below when done.
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits
@@ -86,7 +93,7 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 2. More seeds for adaptive mutation (5+), tune `stall_generations` and the boost size; try it together with the wider view (mixed results so far).
 3. Speed and ground inputs (X/Y speed, in-air flag) in one observation version (see "Making the agent more intelligent", item 1).
 4. Try the box-hit and big-coin rewards (`collect` configs) and check that the path map shows them being collected.
-5. Input window: more rows below Mario (ground stays visible at jump apex) and more tiles ahead than behind, as a ladder variant.
+5. (done: shifted window did not help, see Findings) Input window variants.
 6. Multi-level sequences (advance to the next save state on clear).
 7. PPO: resume, frame stacking, stable evaluation.
 8. Real graphics for the level map from the sprite sheets (location of the sprite sheet downloads still to be decided).

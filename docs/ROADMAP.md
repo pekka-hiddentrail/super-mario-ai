@@ -78,7 +78,10 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   runs on seeds 3-5 reproduced the earlier numbers exactly (2808 / 3674 / 3432), confirming runs are deterministic per seed.
 - **Jump options as inputs** (`inputs = "physics"`, built; `jumpview.py`): from the measured jump formula, per jump (A/B held 1/10/25 frames)
   land-or-pit, enemy on the arc, coins, landing offset. Checked against the emulator on 216 jumps: land-or-pit right 97%, landing within
-  one tile 65%. B jumps harder than A (takeoff 77..90 vs 71..82). Test on Yoshi's Island 1 (seeds 3-7) queued/running; result below when done.
+  one tile 65%. B jumps harder than A (takeoff 77..90 vs 71..82).
+  **Result on Yoshi's Island 1** (seeds 3-7, same settings as the symmetric runs): mean best x 3690 against 2990; better on 4 of 5 seeds
+  (+1788, +243, +192, +2794), worse on 1 (-1515); no clear in either. Encouraging but not proven at 5 seeds. Test on the gap levels
+  (Yoshi's Island 3 and 4, `configs/experiments/gaps_yi34.toml`) is running.
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits

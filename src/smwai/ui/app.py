@@ -1,4 +1,4 @@
-"""Streamlit dashboard: training curves, start/stop runs with edited settings, replay and path map."""
+"""Streamlit dashboard: training curves, start/stop runs, live tuning, replay and path map."""
 import json
 import os
 import signal
@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from smwai import config
+from smwai import config, live
 
 ROOT = Path(os.environ.get("SMWAI_ROOT", ".")).resolve()
 RUNS = ROOT / "runs"
@@ -61,7 +61,6 @@ def procs():
     for f in PROCS.glob("*.json"):
         info = json.loads(f.read_text())
         info["alive"] = alive(info["pid"])
-        info["file"] = f
         out.append(info)
     return out
 
@@ -82,10 +81,46 @@ def viewer_frame(path, height):
     components.iframe(f"http://localhost:{VIEWER_PORT}{path}", height=height, scrolling=True)
 
 
+def param_inputs(raw, live_mode, prefix):
+    """Number inputs for the tunable settings; edits `raw` in place. Returns (generations, workers)."""
+    c1, c2, c3 = st.columns(3)
+    generations, workers = raw["train"].get("generations", 100), raw["train"].get("workers", 4)
+    with c1:
+        st.markdown("**Episode limits**" if live_mode else "**Training**")
+        if not live_mode:
+            generations = st.number_input("Generations", 1, 10000, int(generations), key=prefix + "gens")
+            workers = st.number_input("Parallel emulators", 1, 32, int(workers), key=prefix + "workers")
+            raw["neat"]["pop_size"] = st.number_input("Population", 10, 2000, int(raw["neat"]["pop_size"]),
+                                                      key=prefix + "pop")
+        raw["env"]["stuck_frames"] = st.number_input("Give up after N frames without progress", 30, 2000,
+                                                      int(raw["env"]["stuck_frames"]), key=prefix + "stuck")
+    with c2:
+        st.markdown("**Reward**")
+        for key, label in [("progress", "Per pixel of progress"), ("clear_bonus", "Clear bonus"),
+                           ("time_penalty", "Penalty per frame"), ("death_penalty", "Death penalty"),
+                           ("powerup_bonus", "Power-up bonus"), ("coin_bonus", "Coin bonus")]:
+            raw["reward"][key] = st.number_input(label, value=float(raw["reward"].get(key, 0.0)), step=0.1,
+                                                 format="%.2f", key=prefix + key)
+    with c3:
+        st.markdown("**NEAT**")
+        for key, label in [("conn_add_prob", "Add connection"), ("conn_delete_prob", "Delete connection"),
+                           ("node_add_prob", "Add node"), ("node_delete_prob", "Delete node"),
+                           ("weight_mutate_rate", "Mutate weights"), ("survival_threshold", "Survival fraction")]:
+            raw["neat"][key] = st.number_input(label, 0.0, 1.0, float(raw["neat"][key]), step=0.05,
+                                               key=prefix + key)
+        raw["neat"]["compatibility_threshold"] = st.number_input(
+            "Species threshold (lower = more species)", 0.5, 20.0, float(raw["neat"]["compatibility_threshold"]),
+            step=0.5, key=prefix + "compat")
+        raw["neat"]["max_stagnation"] = st.number_input("Drop species after N stale generations", 1, 200,
+                                                         int(raw["neat"]["max_stagnation"]), key=prefix + "stag")
+    return int(generations), int(workers)
+
+
 # ---------- layout ----------
 ensure_viewer()
 st.title("Super Mario World AI")
-tab_runs, tab_train, tab_replay, tab_map = st.tabs(["Runs", "Train", "Replay", "Path map"])
+tab_runs, tab_train, tab_live, tab_replay, tab_map = st.tabs(
+    ["Runs", "Train", "Live tuning", "Replay", "Path map"])
 
 with tab_runs:
     names = run_names()
@@ -93,9 +128,9 @@ with tab_runs:
         st.info("No runs yet. Start one in the Train tab.")
     else:
         picked = st.multiselect("Runs to compare", names, default=names[:2])
-        live = st.toggle("Auto-refresh every 10 s", value=True)
+        auto = st.toggle("Auto-refresh every 10 s", value=True)
 
-        @st.fragment(run_every=10 if live else None)
+        @st.fragment(run_every=10 if auto else None)
         def curves():
             if not picked:
                 return
@@ -121,40 +156,16 @@ with tab_train:
     raw = config.load_raw(base)
     with st.form("train"):
         name = st.text_input("Run name", value=f"{raw.get('name', 'run')}-custom")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown("**Training**")
-            generations = st.number_input("Generations", 1, 10000, int(raw["train"].get("generations", 100)))
-            workers = st.number_input("Parallel emulators", 1, 32, int(raw["train"].get("workers", 4)))
-            raw["neat"]["pop_size"] = st.number_input("Population", 10, 2000, int(raw["neat"]["pop_size"]))
-            raw["env"]["stuck_frames"] = st.number_input("Give up after N frames without progress", 30, 2000,
-                                                          int(raw["env"]["stuck_frames"]))
-        with c2:
-            st.markdown("**Reward**")
-            for key, label in [("progress", "Per pixel of progress"), ("clear_bonus", "Clear bonus"),
-                               ("time_penalty", "Penalty per frame"), ("death_penalty", "Death penalty"),
-                               ("powerup_bonus", "Power-up bonus"), ("coin_bonus", "Coin bonus")]:
-                raw["reward"][key] = st.number_input(label, value=float(raw["reward"].get(key, 0.0)), step=0.1,
-                                                     format="%.2f")
-        with c3:
-            st.markdown("**NEAT**")
-            for key, label in [("conn_add_prob", "Add connection"), ("conn_delete_prob", "Delete connection"),
-                               ("node_add_prob", "Add node"), ("node_delete_prob", "Delete node"),
-                               ("weight_mutate_rate", "Mutate weights"), ("survival_threshold", "Survival fraction")]:
-                raw["neat"][key] = st.number_input(label, 0.0, 1.0, float(raw["neat"][key]), step=0.05)
-            raw["neat"]["compatibility_threshold"] = st.number_input(
-                "Species threshold (lower = more species)", 0.5, 20.0, float(raw["neat"]["compatibility_threshold"]), step=0.5)
-            raw["neat"]["max_stagnation"] = st.number_input("Drop species after N stale generations", 1, 200,
-                                                             int(raw["neat"]["max_stagnation"]))
+        generations, workers = param_inputs(raw, False, "t_")
         go = st.form_submit_button("Start training", type="primary")
     if go:
         safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in name).strip("-") or "run"
         raw["name"] = safe
-        raw["train"]["generations"], raw["train"]["workers"] = int(generations), int(workers)
+        raw["train"]["generations"], raw["train"]["workers"] = generations, workers
         out = ROOT / "configs" / "custom" / f"{safe}.toml"
         out.parent.mkdir(exist_ok=True)
         out.write_text(config.dump(raw))
-        start_training(out, int(workers), int(generations))
+        start_training(out, workers, generations)
         st.success(f"Started {safe}. Watch it in the Runs tab (the first generation takes a minute).")
 
     st.subheader("Runs started from here")
@@ -166,6 +177,37 @@ with tab_train:
             st.rerun()
         if c3.checkbox("Log", key=f"log-{info['name']}"):
             st.code("\n".join(Path(info["log"]).read_text().splitlines()[-15:]) or "(empty)")
+
+with tab_live:
+    st.caption("Changes are applied at the start of the next generation, for runs that use this version of "
+               "the trainer. Runs started before live tuning existed ignore them. Note that changing the "
+               "reward changes what 'fitness' means, so numbers before and after are not directly comparable.")
+    candidates = [n for n in run_names() if is_running(n)] or run_names()
+    if not candidates:
+        st.info("No runs yet.")
+    else:
+        target = st.selectbox("Run", candidates, key="live_run")
+        rdir = RUNS / target
+        cur = config.load_raw(rdir / "config.toml")
+        for section, vals in live.read_overrides(rdir / "overrides.json").items():
+            cur.setdefault(section, {}).update(vals)
+        with st.form(f"live-{target}"):
+            param_inputs(cur, True, f"l_{target}_")
+            apply = st.form_submit_button("Apply from next generation", type="primary")
+        if apply:
+            ov = {"env": {k: cur["env"][k] for k in live.ENV_KEYS if k in cur["env"]},
+                  "reward": {k: cur["reward"][k] for k in live.REWARD_KEYS if k in cur["reward"]},
+                  "neat": {k: cur["neat"][k] for k in live.NEAT_KEYS if k in cur["neat"]}}
+            live.write_json_atomic(rdir / "overrides.json", ov)
+            st.success("Saved. The trainer applies it when the current generation finishes.")
+        st.subheader("Changes applied so far")
+        ev = rdir / "events.jsonl"
+        if ev.exists():
+            rows = [json.loads(line) for line in ev.read_text().splitlines()]
+            st.dataframe(pd.DataFrame([{"generation": r["generation"], "changed": json.dumps(r["changed"])}
+                                       for r in rows]), hide_index=True)
+        else:
+            st.write("None yet.")
 
 with tab_replay:
     names = [n for n in run_names() if (RUNS / n / "best").exists()]

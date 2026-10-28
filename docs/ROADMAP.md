@@ -12,7 +12,7 @@ Status: done = in `main`/branch, next = planned order, later = wanted but not sc
    like MarI/O: input grid, hidden nodes, button outputs, green/red weights, live activations).
 2. ~~**Level map + path view**~~ done (http://localhost:8765/map). Still to do: real graphics, path marks for power-ups.
 3. ~~**Streamlit dashboard**~~ done (`scripts/ui.sh`, http://localhost:8501) - training curves, parameter editing, run browser, embeds the viewer.
-4. Live parameter tuning between generations (reward weights, mutation rates).
+4. ~~Live parameter tuning~~ done (dashboard "Live tuning" tab; applied at the next generation).
 
 ## Level map and path view (requested)
 - Draw the **whole level** as one picture (horizontal scrolling levels first).

@@ -104,6 +104,16 @@ levels, bonus rooms, mini games and things that are not to the right, the agent 
 **what a move will lead to** (prediction). The ideas below are ordered by value for effort.
 None of this is built yet unless marked.
 
+**Ground rules (apply to every item below):**
+- **AI only.** No human in the loop: no human demonstrations, no hand-labelled data. Everything is learned from
+  the agent's own play and its reward.
+- **Organic understanding, not tricks.** No tool-assisted speedrun methods: no save-state search or
+  rewind-and-retry as a planner (beam search, MCTS over states, Go-Explore archives), no frame-perfect scripts, no
+  hard-coded routes, no scripted bots. The agent only sees what a player could see (screen contents via game
+  memory: tiles, sprites, speeds) and only presses buttons. Every attempt starts from the level start.
+- **Knowledge of the game is allowed as a model, not as a script.** Physics measured from the game (item 3) is a
+  tool the agent *uses to understand* a jump, the way a player learns jump arcs. It never decides the button presses.
+
 ### 0. Principle: one model does not fit every situation
 A NEAT network trained on a side-scrolling level does not work in a bonus room, a pipe
 section, a boss room, the world map or a mini game: the goal, the coordinates and often the
@@ -112,11 +122,11 @@ controls differ. So the design is **a context router plus one specialist per con
 | Context | How we detect it (game memory) | Specialist |
 |---|---|---|
 | Normal level, side-scrolling | game mode = in level, level/room id | NEAT / PPO policy per level or level family |
-| Bonus room, pipe room, sub-area | room/screen id changes while the level continues | own small policy or scripted routine, goal = the exit |
+| Bonus room, pipe room, sub-area | room/screen id changes while the level continues | own small learned policy, goal = the exit |
 | Boss room (e.g. Bowser, Koopalings) | boss sprite present, room id | own policy; boss sprite IDs still to be verified |
 | Water level | in-water flags (`$75`, `$85`) | own policy (different physics) or same policy with a water input |
-| World map / overworld | game mode != in level | map navigator (graph search to the next level), not a neural net |
-| Mini game | game mode / room id | own policy, trained from imitation of human play |
+| World map / overworld | game mode != in level | own learned policy, goal = enter the next level node (needs a reward for reaching a new level) |
+| Mini game | game mode / room id | own policy, trained with RL from a reward read from game memory (score, lives, bonus) |
 
 - The router is rule-based (no learning): read game mode, level id, room id and a few flags,
   and pick the specialist. Every specialist keeps its own genome/network, config and run folder.
@@ -136,58 +146,64 @@ controls differ. So the design is **a context router plus one specialist per con
 - **Novelty reward**: pay for visiting a new (room, 16-pixel tile) cell, not only for a new furthest x.
   Rewards going up, back or into pipes. Works for NEAT and PPO.
 - **Novelty search / MAP-Elites (NEAT)**: keep many *different* behaviours alive instead of one best.
-- **Go-Explore style archive**: save emulator states at interesting cells, start new attempts from them.
-  The emulator is deterministic, so this is exact. The same archive supplies start states for
-  harder sections and for multi-level training.
 - Curiosity/RND bonus for PPO.
+- Multi-level training starts every attempt at a level's start (several levels in rotation), not from saved mid-level states.
 - Status: not built. (Collectible rewards plus the stuck-timer reset allow some going back, but only within the view window.)
 
-### 3. Prediction: where will a jump land?
-- Ask the emulator itself: save the state, press a candidate action for 30-60 frames, record the
-  outcome (landing x/y, died in a pit, hit an enemy, coins collected), restore the state.
-  Exact, but too slow to run at every step during training (about 10x slower).
-- So: collect many such examples offline, train a small predictor, and give NEAT/PPO its answers for
-  a few standard jumps (short, high, running, spin) as extra inputs. The agent then chooses among
-  labelled options instead of reading physics from raw tiles.
-- A hand-written physics model is the cheap alternative, but SMW's variable jump height, slopes
-  and moving enemies make it inaccurate.
-- Short horizon only. Water, Yoshi and cape flight need their own examples.
+### 3. Prediction: where will a jump land? (formula measured, built as `physics.py`)
+A jump is plain constant-acceleration motion, so it is a formula, not a search. Measured from game memory with
+`scripts/probe_jump.py` (units: 1/16 pixel per frame, positive = down):
+- Every frame: `y_speed += gravity`, then `y += y_speed / 16`, and `x += x_speed / 16` (x speed stays constant in the air).
+- Gravity is **3 while the jump button is held** (and fall speed is below 36), **6 once it is released**. Fall speed is capped at 70.
+- Takeoff speed depends on how fast Mario is running: -71, -73, -75, -77, -79, -82 for run speed in bins of 8.
+- So holding A for H frames is two parabolas joined at release (the t² law):
+  `y(t) = v0*t + 1.5*t²` while held, then `y = y_r + v_r*s + 3*s²` after release (s = frames since release), all / 16.
+  The jump height is therefore a function of how long the button is held: e.g. standing, a 1-frame tap rises 28 px,
+  a 10-frame hold 45 px, and the maximum is 55 px (67 px at full run).
+- Verified against the emulator: predicted apex height is within 1 px for 11 hold/speed combinations (`tests/test_physics.py`).
+- Use for the agent: for a few standard holds (tap, short, medium, full) compute the arc from the current x speed,
+  walk the arc over the tile grid and sprite positions, and give the network **per option** a landing summary as
+  inputs: lands on solid ground / falls in a pit / touches an enemy / passes a coin, plus landing offset (dx, dy).
+  The agent still decides *when* to jump and *how long to hold*. The model only helps it read the world, like a
+  player who has learned how far Mario flies. Rollouts in the emulator are not used.
+- Still to measure: air steering (holding left/right changes x speed slowly), spin jump, water, Yoshi, cape flight,
+  bounce off enemies, slopes. Each needs its own probe, same method.
+- Status: formula and tests done. Not yet wired into the observation.
 
 ### 4. Memory
 - Recurrent policy for PPO (`RecurrentPPO`, sb3-contrib). NEAT can also grow recurrent networks
   (set feed-forward off). Lets the agent remember "I already went through that pipe".
 
-### 5. Learning from demonstrations
+### 5. Learning from its own experience
 - NEAT -> PPO: replay NEAT's recorded best runs to pre-train the PPO network (behaviour cloning),
-  then continue with PPO. Needs the same button layout in both (8 independent buttons).
-  Note: PPO currently uses 10 button combinations, so a mapping would be needed.
-- Human -> agent: record your own play with the manual-play tool, for mini games and secret exits
-  where a reward is hard to write down. Beware: deterministic emulator means a recorded winner is
-  a memorised key sequence; train on several levels or add small randomness for real skill.
+  then continue with PPO. This is AI teaching AI, no human involved. Needs the same button layout in both
+  (8 independent buttons). Note: PPO currently uses 10 button combinations, so a mapping would be needed.
+- Always train across several levels or with small randomness (sticky actions): the emulator is deterministic, so a
+  single recorded winner would only be a memorised key sequence, not skill.
 
-### 6. Search with the emulator
-- Beam search / MCTS over saved states, like a tool-assisted speedrun bot. Finds hidden routes and
-  produces demonstrations for imitation. It plans for one level, it does not generalise by itself.
-
-### 7. Hierarchy and goals (later)
+### 6. Hierarchy and goals (later)
 - A high-level choice ("go to the pipe", "reach the goal") plus a low-level policy that gets there
   (goal-conditioned RL). Powerful but hard to get right; try 0-2 first.
-- Overworld: breadth-first search over the world map graph to the next level node.
 
 ### What probably does not pay off yet
 - World-model methods (Dreamer-style) and sequence models: heavy, need a lot of data.
 - Learning from pixels: we have exact game memory. Only useful to work on other games.
+
+### Not doing (by the ground rules)
+- Human demonstrations or human-in-the-loop labelling.
+- Save-state search, MCTS/beam search over emulator states, Go-Explore state archives, rewind-and-retry planners.
+- Scripted routes, frame-perfect input scripts, hard-coded navigators or glitch exploitation.
 
 ### Suggested order
 1. Fair benchmark: several seeds, clear rate, steps/generations to clear, clear time, coins
    (the experiment runner is the start of this).
 2. Diagnose where runs die on the plateau levels (path map death marks) before choosing a fix.
 3. Context + speed inputs and the novelty reward (item 1 + novelty part of 2).
-4. Router and per-context specialists (item 0), starting with level vs. bonus room.
-5. Multi-level sequences and the Go-Explore archive.
-6. PPO baseline on the same benchmark, then imitation from NEAT (item 5).
-7. Jump predictor (item 3), tested on a level where runs die to jumps.
-8. Recurrent PPO, overworld navigator, hierarchy.
+4. Jump-arc inputs from the physics model (item 3), tested on a level where runs die to jumps.
+5. Router and per-context specialists (item 0), starting with level vs. bonus room.
+6. Multi-level sequences (every attempt from a level start).
+7. PPO baseline on the same benchmark, then pre-training from NEAT runs (item 5).
+8. Recurrent PPO, hierarchy.
 
 Rule: one change at a time, measured on at least three seeds and two or three levels.
 

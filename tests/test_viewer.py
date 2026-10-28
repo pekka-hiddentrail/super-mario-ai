@@ -48,3 +48,18 @@ def test_run_path_uses_recorded_path(tmp_path):
     (best / "gen_0001.json").write_text(json.dumps(
         {"generation": 1, "fitness": 5.0, "max_x": 9, "cleared": True, "actions": [], "path": [[0, 1], [2, 3]]}))
     assert run_path(tmp_path / "r", 1)["path"] == [[0, 1], [2, 3]]
+
+
+def test_list_videos_and_best_generation(tmp_path):
+    from smwai.video import best_generation
+    from smwai.viewer.server import list_videos
+    run = tmp_path / "r1"
+    (run / "best").mkdir(parents=True)
+    (run / "videos").mkdir()
+    for g, fit in [(1, 10.0), (2, 99.0), (3, 50.0)]:
+        (run / "best" / f"gen_{g:04d}.json").write_text(json.dumps(
+            {"generation": g, "fitness": fit, "max_x": g * 100, "cleared": g == 2, "actions": []}))
+    assert best_generation(run)["generation"] == 2
+    (run / "videos" / "best_gen_0002.mp4").write_bytes(b"x" * 10)
+    vids = list_videos(tmp_path)
+    assert vids[0]["generation"] == 2 and vids[0]["fitness"] == 99.0 and vids[0]["cleared"] is True

@@ -11,7 +11,7 @@ from .replay import compute_replay
 
 STATIC = Path(__file__).parent / "static"
 _emu_lock = threading.Lock()      # one emulator per process
-_NAME = re.compile(r"^[\w.\-]+$")
+_NAME = re.compile(r"^(?!\.)[\w.\-]+$")      # no leading dot: blocks '..' path tricks
 
 
 def list_runs(runs_dir):
@@ -26,6 +26,21 @@ def list_runs(runs_dir):
     return runs
 
 
+def list_videos(runs_dir):
+    """Runs that have rendered videos, with the metrics needed to describe them."""
+    out = []
+    for vdir in sorted(Path(runs_dir).glob("*/videos"), reverse=True):
+        run = vdir.parent
+        for mp4 in sorted(vdir.glob("*.mp4")):
+            gen = int(mp4.stem.split("_")[-1])
+            rec_file = run / "best" / f"gen_{gen:04d}.json"
+            rec = json.loads(rec_file.read_text()) if rec_file.exists() else {}
+            out.append({"run": run.name, "file": mp4.name, "generation": gen,
+                        "fitness": rec.get("fitness"), "max_x": rec.get("max_x"),
+                        "cleared": rec.get("cleared"), "size_mb": round(mp4.stat().st_size / 1e6, 1)})
+    return out
+
+
 def make_handler(runs_dir):
     runs_dir = Path(runs_dir)
 
@@ -38,6 +53,33 @@ def make_handler(runs_dir):
             self.end_headers()
             self.wfile.write(data)
 
+        def _send_video(self, rel):
+            """Serve runs/<run>/videos/<file>.mp4 with Range support so browsers can seek."""
+            run, _, name = rel.partition("/")
+            path = runs_dir / run / "videos" / name
+            if not (_NAME.match(run) and _NAME.match(name) and path.is_file()):
+                return self._send('{"error": "not found"}', status=404)
+            size = path.stat().st_size
+            start, end = 0, size - 1
+            m = re.match(r"bytes=(\d*)-(\d*)", self.headers.get("Range", ""))
+            if m and (m.group(1) or m.group(2)):
+                if m.group(1):
+                    start = int(m.group(1))
+                    end = int(m.group(2)) if m.group(2) else end
+                else:
+                    start = max(0, size - int(m.group(2)))
+                end = min(end, size - 1)
+            self.send_response(206 if m else 200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(end - start + 1))
+            if m:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.end_headers()
+            with open(path, "rb") as f:
+                f.seek(start)
+                self.wfile.write(f.read(end - start + 1))
+
         def do_GET(self):
             url = urlparse(self.path)
             q = parse_qs(url.query)
@@ -46,6 +88,12 @@ def make_handler(runs_dir):
                     self._send((STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
                 elif url.path == "/api/runs":
                     self._send(json.dumps(list_runs(runs_dir)))
+                elif url.path in ("/videos", "/videos.html"):
+                    self._send((STATIC / "videos.html").read_bytes(), "text/html; charset=utf-8")
+                elif url.path == "/api/videos":
+                    self._send(json.dumps(list_videos(runs_dir)))
+                elif url.path.startswith("/video/"):
+                    return self._send_video(url.path[len("/video/"):])
                 elif url.path in ("/map", "/map.html"):
                     self._send((STATIC / "map.html").read_bytes(), "text/html; charset=utf-8")
                 elif url.path in ("/api/level", "/api/path"):

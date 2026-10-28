@@ -78,6 +78,7 @@ class SmwEnv(gym.Env):
         self._level = None
         self._pad = None
         self.frame = None
+        self.capture = None            # set to a list to collect every emulator frame (video)
 
     def _open(self, level):
         import stable_retro as retro  # Linux/WSL only; imported lazily so config/tests work anywhere
@@ -108,6 +109,8 @@ class SmwEnv(gym.Env):
         self.max_x = self.state.x
         self.frames = 0
         self.stuck = 0
+        if self.capture is not None:
+            self.capture.append(self.frame.copy())
         return grid, self._info()
 
     def _info(self):
@@ -123,6 +126,8 @@ class SmwEnv(gym.Env):
         for _ in range(self.cfg.frame_skip):
             self.frame = self._env.step(pad)[0]
             self.frames += 1
+            if self.capture is not None:          # video recording: keep every emulator frame
+                self.capture.append(self.frame.copy())
         self.state, grid = self._read()
         rc = self.cfg.reward
         reward = -rc.time_penalty * self.cfg.frame_skip

@@ -21,6 +21,12 @@ def main(argv=None):
     pp.add_argument("--envs", type=int, help="parallel emulators")
     pp.add_argument("--run-dir")
 
+    vd = sub.add_parser("video", help="render the best run of each training run to mp4")
+    vd.add_argument("--runs-dir", default="runs")
+    vd.add_argument("--run", help="only this run (folder name)")
+    vd.add_argument("--gen", type=int, help="specific generation instead of the best one")
+    vd.add_argument("--force", action="store_true", help="re-render even if the video exists")
+
     r = sub.add_parser("replay", help="re-run a recorded generation headless and check it")
     r.add_argument("run_dir")
     r.add_argument("generation", type=int)
@@ -46,6 +52,19 @@ def main(argv=None):
     if args.cmd == "view":
         from .viewer.server import serve
         return serve(args.runs_dir, args.port)
+    if args.cmd == "video":
+        from . import video
+        runs = [Path(args.runs_dir) / args.run] if args.run else sorted(
+            p.parent for p in Path(args.runs_dir).glob("*/best") if any(p.glob("gen_*.json")))
+        for run in runs:
+            gen = args.gen if args.gen is not None else video.best_generation(run)["generation"]
+            out = run / "videos" / f"best_gen_{gen:04d}.mp4"
+            if out.exists() and not args.force:
+                print(f"{run.name}: gen {gen} already rendered")
+                continue
+            print(f"{run.name}: rendering generation {gen} ...", flush=True)
+            print("  ->", video.render_run(run, out, generation=gen), flush=True)
+        return
     from . import config, train
 
     if args.cmd == "train-ppo":

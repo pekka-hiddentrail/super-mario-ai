@@ -129,8 +129,8 @@ def param_inputs(raw, live_mode, prefix):
 # ---------- layout ----------
 ensure_viewer()
 st.title("Super Mario World AI")
-tab_runs, tab_train, tab_live, tab_replay, tab_map = st.tabs(
-    ["Runs", "Train", "Live tuning", "Replay", "Path map"])
+tab_runs, tab_train, tab_live, tab_replay, tab_map, tab_video = st.tabs(
+    ["Runs", "Train", "Live tuning", "Replay", "Path map", "Videos"])
 
 with tab_runs:
     names = run_names()
@@ -259,6 +259,18 @@ with tab_replay:
     names = [n for n in run_names() if (RUNS / n / "best").exists()]
     if names:
         viewer_frame(f"/?run={st.selectbox('Run', names, key='rp')}", 1050)
+
+with tab_video:
+    st.caption("One video per run: the generation with the highest fitness at the time of rendering. "
+               "Runs still in progress get a new video when you render again with 'Re-render'.")
+    c1, c2 = st.columns(2)
+    force = c2.checkbox("Re-render existing videos", value=False)
+    if c1.button("Render best-run videos"):
+        with st.spinner("Rendering (about a minute per run)..."):
+            cmd = [sys.executable, "-m", "smwai.cli", "video", "--runs-dir", str(RUNS)] + (["--force"] if force else [])
+            res = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+        st.code((res.stdout + res.stderr)[-1500:] or "(no output)")
+    viewer_frame("/videos", 1400)
 
 with tab_map:
     names = [n for n in run_names() if (RUNS / n / "best").exists()]

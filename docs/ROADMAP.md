@@ -94,6 +94,11 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   generations) all 6 runs cleared the level but none of the 90 recorded best runs entered the pipe at x 3878; with only solid-block
   inputs a pipe looks like any other block. The `explore` input mode adds a pipe channel (Map16 0x134-0x13F) on top of `physics`;
   its test (`configs/experiments/explore_pipes.toml`) is queued behind the Yoshi's Island 4 pipe test.
+- **Pipe bonus on Yoshi's Island 4** (collect inputs, baseline vs `pipe_bonus` 100000 vs pipe + jump inputs; 2 seeds, 12 generations, no pipe
+  channel): all four pipe runs found a pipe (best fitness about 100,800-102,700); the baselines found none. Seed 2 entered the sideways pipe at
+  x ~2723 (the way on); seed 1 took an earlier pipe near x ~810 and then never progressed (best x 811 / 809), because 100000 for one pipe beats
+  any amount of progress. So sideways pipes are found by running into them, downward pipes (which need DOWN) were not found on Yoshi's Island 2.
+  Lesson: a very large bonus can trap a run in a bonus room; progress inside the new room (per-room max x) is still unrewarded.
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits

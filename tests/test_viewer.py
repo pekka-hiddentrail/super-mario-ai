@@ -112,3 +112,17 @@ def test_list_runs_newest_first_and_uses_index(tmp_path):
     (tmp_path / "new" / "best" / "gen_0000.json").write_text("{broken")
     again = list_runs(tmp_path)
     assert again[0]["gens"][0]["fitness"] == 1.0
+
+
+def test_network_panel_draws_inputs_hidden_and_buttons():
+    from smwai.video import PANEL_W, NetworkPanel
+    inputs = list(range(-1, -(2 * 13 * 13 + 1), -1))
+    graph = {"inputs": inputs, "outputs": list(range(8)), "hidden": [20],
+             "layer": {"20": 1, **{str(o): 2 for o in range(8)}},
+             "edges": [{"from": -1, "to": 20, "w": 1.5}, {"from": 20, "to": 7, "w": -0.5}]}
+    layout = [{"name": "solid", "kind": "grid"}, {"name": "enemy", "kind": "grid"}]
+    panel = NetworkPanel(graph, layout, 6, 492)
+    obs = [1] + [0] * (len(inputs) - 1)
+    img = panel.draw(obs, {20: 0.9, 7: 0.8}, [0, 0, 0, 0, 0, 0, 0, 1])
+    assert img.size == (PANEL_W, 492)
+    assert len(set(img.getdata())) > 10          # something was drawn, not a blank panel

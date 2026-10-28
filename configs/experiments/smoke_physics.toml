@@ -1,0 +1,14 @@
+# Tiny run to check physics inputs end to end (train, record, video).
+name = "smoke-physics"
+base = "configs/yi1.toml"
+seeds = [1]
+generations = 3
+pop_size = 30
+workers = 6
+
+[[variant]]
+name = "physics"
+[variant.env]
+inputs = "physics"
+[variant.adapt]
+enabled = true

@@ -61,9 +61,10 @@ class NetworkPanel:
         self.mario = (up, left)                    # row, column of Mario's tile in each grid
         self.graph, self.layout, self.height = graph, layout, height
         grids = [item for item in layout if item["kind"] == "grid"]
-        self.cell = 14 if len(grids) == 1 else 9 if len(grids) <= 3 else 7
+        compact = any(":" in item["name"] for item in layout if item["kind"] == "scalar")
+        self.cell = 14 if len(grids) == 1 else 5 if compact else 9 if len(grids) <= 3 else 7
         self.pos, self.groups = {}, []
-        idx, y, sx = 0, 34, 18
+        idx, y, sx, scalars = 0, 34, 18, []
         for item in layout:
             if item["kind"] == "grid":
                 self.groups.append(("grid", item["name"], idx, 10, y))
@@ -72,11 +73,27 @@ class NetworkPanel:
                                                           y + (i // self.cols) * self.cell + self.cell / 2)
                 idx += self.rows * self.cols
                 y += self.rows * self.cell + (16 if len(grids) > 1 else 0)
+            elif compact:
+                scalars.append((idx, item["name"]))
+                idx += 1
             else:
                 self.pos[graph["inputs"][idx]] = (sx, height - 26)
                 self.groups.append(("scalar", item["name"], idx, sx, height - 26))
                 idx += 1
                 sx += 66
+        if compact:                      # many single values: text lines, base values first, then one line per jump option
+            base = [(i, n) for i, n in scalars if ":" not in n]
+            for k, (i, n) in enumerate(base):
+                self._text_item(i, n.replace("_", " "), 10 + (k % 4) * 104, y + 4 + (k // 4) * 12)
+            y += 4 + ((len(base) + 3) // 4) * 12 + 4
+            rows_by_prefix = {}
+            for i, n in scalars:
+                if ":" in n:
+                    rows_by_prefix.setdefault(n.split(":")[0], []).append((i, n.split(":")[1]))
+            for r, (prefix, items) in enumerate(rows_by_prefix.items()):
+                self.groups.append(("label", prefix, 0, 10, y + r * 12))
+                for k, (i, field) in enumerate(items):
+                    self._text_item(i, field, 44 + k * 76, y + r * 12)
         cols = {}
         for h in graph["hidden"]:
             cols.setdefault(graph["layer"][str(h)], []).append(h)
@@ -86,6 +103,11 @@ class NetworkPanel:
                 self.pos[h] = (200 + (layer - 1) * (210 / max(1, top - 1)), 50 + (i + 0.5) * (height - 100) / len(nodes))
         for i, o in enumerate(graph["outputs"]):
             self.pos[o] = (480, 56 + (i + 0.5) * (height - 110) / len(graph["outputs"]))
+
+    def _text_item(self, input_index, label, x, y):
+        key = self.graph["inputs"][input_index]
+        self.pos[key] = (x - 3, y + 5)
+        self.groups.append(("text", label, input_index, x, y))
 
     def draw(self, obs, vals, pressed):
         g, cell = self.graph, self.cell
@@ -122,6 +144,12 @@ class NetworkPanel:
                     d.rectangle(box, fill=fill, outline=(44, 49, 58))
                 mx, my = self.pos[g["inputs"][start + self.mario[0] * self.cols + self.mario[1]]]
                 d.rectangle([mx - cell / 2, my - cell / 2, mx + cell / 2, my + cell / 2], outline=ACCENT, width=2)
+            elif kind == "text":
+                v = value[g["inputs"][start]]
+                d.text((x, y), f"{name} {v:+d}" if name in ("dx", "dy", "land") else f"{name} {v}",
+                       fill=ACCENT if v else (90, 97, 110), font=small)
+            elif kind == "label":
+                d.text((x, y), name, fill=MUTED, font=small)
             else:
                 v = value[g["inputs"][start]]
                 d.ellipse([x - 6, y - 6, x + 6, y + 6], fill=ACCENT if v else None, outline=MUTED, width=2)

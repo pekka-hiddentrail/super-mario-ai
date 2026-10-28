@@ -17,6 +17,8 @@ GAME_MODE = 0x100          # 0x14 = in level
 LIVES = 0x0DBE
 COINS = 0x0DBF
 PLAYER_X_SPEED = 0x7B      # signed 8-bit, 1/16 pixel per frame
+PLAYER_Y_SPEED = 0x7D      # signed 8-bit, 1/16 pixel per frame (positive = down)
+IN_AIR = 0x72              # non-zero while Mario is in the air
 YOSHI_COINS = 0x1420       # big (Yoshi/dragon) coins collected in this level
 BONUS_STARS = 0x1900       # bonus stars won at the goal bar (read on the clear step, before the tally counts it down)
 USED_BLOCK = 0x32          # Map16 0x132: a ? block that has been hit (count rises when one is hit)
@@ -76,6 +78,8 @@ class MarioState:
     in_water: bool = False
     on_yoshi: bool = False
     x_speed: int = 0            # signed, 1/16 pixel per frame (positive = right)
+    y_speed: int = 0            # signed, 1/16 pixel per frame (positive = down)
+    in_air: bool = False
     yoshi_coins: int = 0
     bonus_stars: int = 0        # set when the goal bar is hit: 0 for a low hit, more the higher the bar was hit
     used_blocks: int = 0        # number of already-hit blocks in the level (rises on every block hit)
@@ -123,6 +127,8 @@ def read_state(ram):
         on_yoshi=u8(ram, ON_YOSHI) != 0,
         yoshi_coins=u8(ram, YOSHI_COINS), bonus_stars=u8(ram, BONUS_STARS), used_blocks=used_block_count(ram),
         x_speed=u8(ram, PLAYER_X_SPEED) - 256 if u8(ram, PLAYER_X_SPEED) > 127 else u8(ram, PLAYER_X_SPEED),
+        y_speed=u8(ram, PLAYER_Y_SPEED) - 256 if u8(ram, PLAYER_Y_SPEED) > 127 else u8(ram, PLAYER_Y_SPEED),
+        in_air=u8(ram, IN_AIR) != 0,
         sprites=read_sprites(ram))
 
 
@@ -208,3 +214,22 @@ def tile_grid(ram, state, view=6):
     grid[enemy == 1] = ENEMY
     grid[item == 1] = ITEM
     return grid
+
+
+def _tile_offset(px, py):
+    """Offset of the Map16 tile at a level pixel inside the table, or None outside the level."""
+    tx, ty = int(px) // 16, int(py) // 16
+    if px < 0 or py < 0 or ty >= 27:
+        return None
+    return (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
+
+
+def solid_at(ram, px, py):
+    off = _tile_offset(px, py)
+    return off is not None and MAP16_HIGH + off < len(ram) and ram[MAP16_HIGH + off] == 1
+
+
+def coin_at(ram, px, py):
+    off = _tile_offset(px, py)
+    return (off is not None and MAP16_HIGH + off < len(ram)
+            and ram[MAP16_LOW + off] == COIN_TILE and ram[MAP16_HIGH + off] == 0)

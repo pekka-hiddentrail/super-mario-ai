@@ -60,3 +60,26 @@ def hold_for_apex(x_speed, height):
         if -min(p.dy for p in trajectory(x_speed, hold)) >= height:
             return hold
     return None
+
+
+# --- jump model extensions (button B and arcs that start in mid-air) -------------------------------------------
+# The B button jumps harder than A at the same run speed. Measured takeoff speeds (probe_takeoff.py): bins 0, 1, 2
+# and 4 are measured (77, 79, 82, 87); bins 3 and 5 are extrapolated and unverified.
+TAKEOFF_B = (77, 79, 82, 85, 87, 90)
+
+
+def takeoff_for(button, x_speed):
+    table = TAKEOFF_B if button == "B" else TAKEOFF
+    return -table[min(abs(int(x_speed)) // 8, len(table) - 1)]
+
+
+def trajectory_from(x_speed, vy0, hold, frames=80):
+    """Arc that starts with vertical speed vy0 (negative = rising): a takeoff speed, or the current y speed in
+    mid-air. `hold` = frames the jump button stays down from now (1 = release immediately)."""
+    vy, y, out = vy0, 0.0, []
+    for t in range(frames):
+        y += vy / 16
+        out.append(Point(t, (t + 1) * x_speed / 16, y, vy))
+        gravity = GRAVITY_HELD if (t + 1 < hold and vy < HELD_LIMIT) else GRAVITY_FREE
+        vy = min(vy + gravity, TERMINAL)
+    return out

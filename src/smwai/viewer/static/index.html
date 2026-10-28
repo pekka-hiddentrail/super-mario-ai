@@ -56,7 +56,7 @@
     <div id="stats"></div>
   </div>
   <div class="panel">
-    <canvas id="net" width="760" height="480"></canvas>
+    <canvas id="net" width="760" height="540"></canvas>
     <div class="legend">
       <span><i class="sw" style="background:var(--solid)"></i>solid tile</span>
       <span><i class="sw" style="background:var(--enemy)"></i>enemy</span>
@@ -114,19 +114,35 @@ function layout() {
   const cols = W[0] + W[1] + 1, rows = W[2] + W[3] + 1, n = cols;   // window: [left, right, up, down] tiles
   const L = R.layout || [{ name: 'tiles', kind: 'grid' }];
   const nGrids = L.filter(x => x.kind === 'grid').length, multi = nGrids > 1;
-  const cell = !multi ? 15 : nGrids > 3 ? 6 : 8;
+  const compact = L.some(x => x.kind === 'scalar' && x.name.includes(':'));
+  const cell = !multi ? 15 : compact ? 5 : nGrids > 3 ? 6 : 8;
   pos = {}; groups = [];
-  let idx0 = 0, gy = multi ? 36 : 70, sx = 0;
+  let idx0 = 0, gy = multi ? 36 : 70, sx = 0; const scal = [];
   L.forEach(item => {
     if (item.kind === 'grid') {
       const grp = { name: item.name, kind: 'grid', cell, x0: 24, y0: gy, start: idx0 };
       for (let i = 0; i < rows * cols; i++) pos[g.inputs[idx0 + i]] = [24 + (i % cols) * cell + cell / 2, gy + Math.floor(i / cols) * cell + cell / 2];
       groups.push(grp); idx0 += rows * cols; gy += rows * cell + (multi ? 18 : 0);
+    } else if (compact) {
+      scal.push({ name: item.name, start: idx0 }); idx0 += 1;
     } else {
       pos[g.inputs[idx0]] = [34 + sx * 70, 446];
       groups.push({ name: item.name, kind: 'scalar', start: idx0 }); idx0 += 1; sx += 1;
     }
   });
+  if (compact) {                                   // many single values: text lines (base values, then one line per jump option)
+    const text = (it, label, x, y) => { pos[g.inputs[it.start]] = [x - 3, y - 4]; groups.push({ name: label, kind: 'text', start: it.start, x, y }); };
+    const base = scal.filter(s => !s.name.includes(':'));
+    base.forEach((it, k) => text(it, it.name.replace('_', ' '), 24 + (k % 4) * 110, gy + 8 + Math.floor(k / 4) * 13));
+    let ly = gy + 8 + Math.ceil(base.length / 4) * 13 + 6;
+    const byPrefix = {};
+    scal.filter(s => s.name.includes(':')).forEach(it => { const [p, f] = it.name.split(':'); (byPrefix[p] = byPrefix[p] || []).push([it, f]); });
+    Object.entries(byPrefix).forEach(([p, items]) => {
+      groups.push({ name: p, kind: 'label', x: 24, y: ly });
+      items.forEach(([it, f], k) => text(it, f, 60 + k * 90, ly));
+      ly += 13;
+    });
+  }
   const cols = {};
   g.hidden.forEach(h => { (cols[g.layer[h]] = cols[g.layer[h]] || []).push(h); });
   const top = Math.max(1, ...Object.keys(cols).map(Number), 0) + 1;
@@ -188,6 +204,12 @@ function drawNet(s) {
       }
       const m = pos[g.inputs[grp.start + W[2] * cols + W[0]]];   // Mario marker
       c.strokeStyle = css('--accent'); c.lineWidth = 2; c.strokeRect(m[0] - cs / 2, m[1] - cs / 2, cs, cs);
+    } else if (grp.kind === 'label') {
+      c.fillStyle = css('--muted'); c.font = '11px system-ui'; c.fillText(grp.name, grp.x, grp.y);
+    } else if (grp.kind === 'text') {
+      const v = vals[g.inputs[grp.start]];
+      c.fillStyle = v ? css('--accent') : css('--muted'); c.font = '11px system-ui';
+      c.fillText(`${grp.name} ${['dx', 'dy', 'land'].includes(grp.name) && v > 0 ? '+' : ''}${v}`, grp.x, grp.y);
     } else {
       const k = g.inputs[grp.start], [x, y] = pos[k], v = vals[k];
       c.beginPath(); c.arc(x, y, 6, 0, 7); c.fillStyle = v ? css('--accent') : 'transparent'; c.fill();

@@ -10,6 +10,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+from . import jumpview
 from . import ram as R
 
 GAME = "SuperMarioWorld-Snes-v0"
@@ -38,7 +39,7 @@ class EnvConfig:
     frame_skip: int = 4
     radius: int = 6                # view: this many tiles every way around Mario ...
     window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
-    inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins
+    inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -52,6 +53,10 @@ def view(cfg):
 def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
     scalars = [("in_water", "scalar"), ("on_yoshi", "scalar"), ("powerup", "scalar")]
+    if cfg.inputs == "physics":     # collect + Mario's speeds + what each standard jump would do (jumpview.py)
+        motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
+        return ([("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid")] + scalars + motion
+                + [(name, "scalar") for name in jumpview.names()])
     if cfg.inputs == "collect":
         return [("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid")] + scalars
     if cfg.inputs == "channels":
@@ -67,13 +72,16 @@ def n_inputs(cfg):
 
 def build_observation(ram, state, cfg):
     """Flat int8 vector in input_layout order."""
-    if cfg.inputs in ("channels", "collect"):
-        collect = cfg.inputs == "collect"
+    if cfg.inputs in ("channels", "collect", "physics"):
+        collect = cfg.inputs in ("collect", "physics")
         enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect)
         parts = [R.solid_grid(ram, state, view(cfg)).ravel(), enemy.ravel(), item.ravel()]
         if collect:
             parts.append(R.coin_grid(ram, state, view(cfg)).ravel())
         parts.append(np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8))
+        if cfg.inputs == "physics":
+            parts.append(np.array(jumpview.motion_scalars(state), dtype=np.int8))
+            parts.append(jumpview.features(ram, state))
         return np.concatenate(parts).astype(np.int8)
     return R.tile_grid(ram, state, view(cfg)).ravel()
 
@@ -85,7 +93,7 @@ class SmwEnv(gym.Env):
         self.cfg = config or EnvConfig()
         self.render_mode = render_mode
         self.layout = input_layout(self.cfg)
-        self.observation_space = spaces.Box(-1, 3, (n_inputs(self.cfg),), dtype=np.int8)
+        self.observation_space = spaces.Box(-16, 16, (n_inputs(self.cfg),), dtype=np.int8)
         self.action_space = spaces.MultiBinary(len(BUTTONS))
         self._env = None
         self._level = None

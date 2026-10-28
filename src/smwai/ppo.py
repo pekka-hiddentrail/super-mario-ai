@@ -37,7 +37,7 @@ class ComboEnv(gym.Env):
         self.scale = reward_scale
         self.action_space = spaces.Discrete(len(COMBO_MASKS))
         n = self.inner.observation_space.shape[0]
-        self.observation_space = spaces.Box(-1.0, 3.0, (n,), dtype=np.float32)
+        self.observation_space = spaces.Box(-16.0, 16.0, (n,), dtype=np.float32)
         self.ep_return = 0.0
 
     def reset(self, seed=None, options=None):

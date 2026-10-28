@@ -65,6 +65,11 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 - PPO vs NEAT on Yoshi's Island 2 (same reward and `collect` inputs): NEAT cleared in 2 generations (roughly 100k frames, estimated);
   PPO cleared at about 270k steps (about 1.1M frames) and only in some evaluation rounds (3 of 20), so NEAT was about 10x more
   frame-efficient there. One seed each.
+- **The network cannot see the ground at the top of a high jump**: the view covers 6 tiles up and down, and at x 2621 on
+  Yoshi's Island 1 the ground is 7 tiles below Mario at the apex (the solid grid is empty there). A taller or lower-reaching
+  window is a cheap candidate improvement (see Next).
+- Repeat of the long adaptive run on seeds 2-4: seeds 2 and 3 did not clear in 30 generations (best x 4169 and 3554), so the
+  seed-1 clear may have been partly luck; seed 4 and the final write-up are pending.
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits
@@ -79,7 +84,7 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 2. More seeds for adaptive mutation (5+), tune `stall_generations` and the boost size; try it together with the wider view (mixed results so far).
 3. Speed and ground inputs (X/Y speed, in-air flag) in one observation version (see "Making the agent more intelligent", item 1).
 4. Try the box-hit and big-coin rewards (`collect` configs) and check that the path map shows them being collected.
-5. Wider forward-looking input window (more tiles ahead than behind) as a ladder variant.
+5. Input window: more rows below Mario (ground stays visible at jump apex) and more tiles ahead than behind, as a ladder variant.
 6. Multi-level sequences (advance to the next save state on clear).
 7. PPO: resume, frame stacking, stable evaluation.
 8. Real graphics for the level map from the sprite sheets (location of the sprite sheet downloads still to be decided).

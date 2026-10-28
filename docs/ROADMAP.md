@@ -28,8 +28,9 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 ### Training
 - NEAT (neat-python): CLI `smwai train`, parallel workers, per-generation best-run recording (buttons, path, events), checkpoints,
   resume (`scripts/resume_run.sh`), seeds, frame counting (`frames`, `total_frames` in `metrics.csv`).
-- **Adaptive mutation** (`[adapt]` in a config, off by default): when the best fitness stalls for N generations, mutation is
-  boosted until it improves again; logged to `events.jsonl`. Unit-tested; **not yet tested in a real run**.
+- **Adaptive mutation** (`[adapt]` in a config, off by default): when the best fitness has not improved by at least
+  `min_improvement` for N generations, mutation is boosted until it does; logged to `events.jsonl`.
+  Best result so far on Yoshi's Island 1 (3 of 3 seeds better than baseline); see Findings. Recommended config: `configs/yi1_adaptive.toml`.
 - Live parameter tuning: change reward, episode limits and NEAT rates while a run is going (applied at the next generation).
 - PPO (stable-baselines3, CPU only: this PC has only an Intel GPU): `smwai train-ppo`, button combos, same run folder format.
   First version; eval is unstable and there is no resume.
@@ -47,12 +48,21 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 ## Findings so far
 - Yoshi's Island 2 is easy: NEAT clears it in 2-6 generations; a naive hold-right script clears it. Not a useful benchmark.
 - Time penalty 0.2/frame made clears about 10% faster (about 1900 -> 1700 frames), then plateaued.
-- Yoshi's Island 1: NEAT plateaus around x 3550 (30 generations, mixed vs channels inputs: 3538 vs 3661, one seed each, inconclusive).
-- Yoshi's Island 3 (21 screens): in the pilot ladder all variants stalled near x 550 after 15 generations (results of the
-  corrected ladder run are still to be written up).
+- Yoshi's Island 3 (21 screens): every variant of the pilot ladder (collect inputs, lower species threshold, more patience) stalled
+  near x 530-550 after 15 generations (means 528-550, within noise). It needs a structural fix (climbing), not tuning.
+  The Yoshi's Island 1 route was chosen instead.
+- Yoshi's Island 1: NEAT used to plateau around x 3550. Where it ends: around x 3580 a giant Banzai Bill flies in, then the run drops into a gap at x ~3677.
+- **Yoshi's Island 1 ladder** (collect inputs, population 50, 14 generations, best x; seeds 1-2): mutate-more (static higher
+  mutation) 2721 / 4826 (one clear); wide view (17x17) 3433 / 1266; speed bonus 852 / 2955; baseline 858 / 2210; adaptive (first
+  version) 858 / 1758. The spread between seeds alone was larger than most differences.
+- **Confirmation on seeds 3-5**: adaptive mutation (with the min-improvement fix) beat the baseline on all three seeds
+  (2808 / 3674 / 3432 vs 1826 / 1890 / 1991; means 3305 vs 1902). The static higher mutation did **not** hold up
+  (2456 / 980 / 847; mean 1428), so its earlier clear was luck. None of the confirmation runs cleared.
+  The first adaptive version never triggered because tiny fitness gains reset its stall counter; fixed by `min_improvement`.
 - PPO vs NEAT on Yoshi's Island 2 (same reward and `collect` inputs): NEAT cleared in 2 generations (roughly 100k frames, estimated);
   PPO cleared at about 270k steps (about 1.1M frames) and only in some evaluation rounds (3 of 20), so NEAT was about 10x more
   frame-efficient there. One seed each.
+- Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits
 - Background jobs stop when the Claude session ends and WSL is restarted; use checkpoints / `resume_run.sh`.
@@ -62,8 +72,8 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 - PPO sees one frame only (no speed, no memory).
 
 ## Next (in order)
-1. Write up the Yoshi's Island 3 ladder; use the path map death marks to see what blocks x ~550 before choosing fixes.
-2. Real run of **adaptive mutation** on a plateau level (Yoshi's Island 1 or 3), 2-3 seeds, compared with baseline.
+1. Long run on Yoshi's Island 1 with the adaptive config (`configs/yi1_adaptive.toml`); see where it ends (Banzai Bill + pit near x 3580-3680).
+2. More seeds for adaptive mutation (5+), tune `stall_generations` and the boost size; try it together with the wider view (mixed results so far).
 3. Speed and ground inputs (X/Y speed, in-air flag) in one observation version (see "Making the agent more intelligent", item 1).
 4. Try the box-hit and big-coin rewards (`collect` configs) and check that the path map shows them being collected.
 5. Wider forward-looking input window (more tiles ahead than behind) as a ladder variant.
@@ -75,13 +85,13 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 Done (see above). Possible additions: compare two runs on one map, heat map of deaths over many runs, real graphics.
 
 ## Learning ideas (experiment ladder)
-Status: runner built; pilot ladder on Yoshi's Island 3 defined; corrected run in progress/being written up.
+Status: runner built; ladders run on Yoshi's Island 3 (nothing helped) and Yoshi's Island 1 (adaptive mutation helped; see Findings).
 - Reward: time penalty (done, modest effect), speed bonus and fast-clear bonus (built, not yet in a ladder run).
 - Reward: power-up, coin, big coin and box-hit bonuses (built; try on `collect` runs).
 - Exploration: novelty or checkpoint rewards when progress stalls (not built).
 - Inputs: separate channels (done), coins (done), speed/ground (next).
 - NEAT settings: species threshold (note: 1.5 gives one species per genome at population 60 and crashes NEAT), stuck patience,
-  adaptive mutation (built).
+  adaptive mutation (built, best so far), static higher mutation (did not replicate), wider view (mixed), speed bonus (mixed).
 
 ## Making the agent more intelligent (plan)
 

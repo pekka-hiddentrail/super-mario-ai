@@ -31,6 +31,8 @@ class RewardConfig:
     yoshi_coin_bonus: float = 0.0  # per big (Yoshi) coin
     block_bonus: float = 0.0       # per ? block hit (any block that turns into a used block)
     goal_bar_bonus: float = 0.0    # per bonus star won at the goal bar: hitting the bar higher pays more
+    height_bonus: float = 0.0      # per pixel of new standing height: landing on something higher than ever before
+    pipe_bonus: float = 0.0         # per pipe entered downward (each pipe pays once per episode)
 
 
 @dataclass
@@ -101,6 +103,8 @@ class SmwEnv(gym.Env):
         self.frame = None
         self.capture = None            # set to a list to collect every emulator frame (video)
         self.events = []
+        self.best_ground_y = 0
+        self._pipes = set()
 
     def _open(self, level):
         import stable_retro as retro  # Linux/WSL only; imported lazily so config/tests work anywhere
@@ -132,6 +136,8 @@ class SmwEnv(gym.Env):
         self.frames = 0
         self.stuck = 0
         self.events = []
+        self.best_ground_y = self.state.y        # highest standing position so far (smallest y)
+        self._pipes = set()
         if self.capture is not None:
             self.capture.append(self.frame.copy())
         return grid, self._info()
@@ -173,6 +179,23 @@ class SmwEnv(gym.Env):
                 self.events.append([self.frames, kind, self.state.x, self.state.y])
                 if weights[kind] > 0:
                     self.stuck = 0          # collecting something worth reward counts as progress
+        st = self.state
+        if prev.pipe_timer == 0 and st.pipe_timer > 0 and st.pipe_action == R.PIPE_DOWN:
+            key = (st.rooms, st.x // 16, st.y // 16)          # one payment per pipe, so going back and forth is no farm
+            if key not in self._pipes:
+                self._pipes.add(key)
+                reward += rc.pipe_bonus
+                self.events.append([self.frames, "pipe", st.x, st.y])
+                if rc.pipe_bonus > 0:
+                    self.stuck = 0
+        if st.rooms != prev.rooms:
+            self.best_ground_y = st.y                         # new room: new height reference
+        elif not st.in_air and st.y < self.best_ground_y - 12:
+            reward += rc.height_bonus * (self.best_ground_y - st.y)
+            self.events.append([self.frames, "climb", st.x, st.y])
+            self.best_ground_y = st.y
+            if rc.height_bonus > 0:
+                self.stuck = 0
         died = self.state.dying or self.state.lives < prev.lives
         cleared = self.state.level_cleared
         if died:

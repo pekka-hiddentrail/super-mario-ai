@@ -152,3 +152,10 @@ def test_window_shapes_and_shifted_view_sees_more_ground():
     assert tall.shape == (13, 13) and tall[4 + 4].all()   # row 4 (Mario) + 4 below = ground row, whole width
     enemy, item = R.sprite_grids(st, (4, 8, 4, 8), legacy=False)
     assert enemy.shape == (13, 13) and item.sum() == 0
+
+
+def test_pipe_and_room_fields():
+    w = make_wram()
+    w[R.PIPE_TIMER], w[R.PIPE_ACTION], w[R.ROOMS] = 30, R.PIPE_DOWN, 2
+    st = R.read_state(w)
+    assert (st.pipe_timer, st.pipe_action, st.rooms) == (30, 3, 2)

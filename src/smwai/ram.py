@@ -19,6 +19,10 @@ COINS = 0x0DBF
 PLAYER_X_SPEED = 0x7B      # signed 8-bit, 1/16 pixel per frame
 PLAYER_Y_SPEED = 0x7D      # signed 8-bit, 1/16 pixel per frame (positive = down)
 IN_AIR = 0x72              # non-zero while Mario is in the air
+PIPE_TIMER = 0x88          # counts down while Mario goes into (or comes out of) a pipe
+PIPE_ACTION = 0x89         # 3 = entering a pipe downward, 7 = coming out of a ceiling pipe (measured on Yoshi Island 2)
+PIPE_DOWN = 3
+ROOMS = 0x141A             # increments every time a new room is entered through a pipe or door
 YOSHI_COINS = 0x1420       # big (Yoshi/dragon) coins collected in this level
 BONUS_STARS = 0x1900       # bonus stars won at the goal bar (read on the clear step, before the tally counts it down)
 USED_BLOCK = 0x32          # Map16 0x132: a ? block that has been hit (count rises when one is hit)
@@ -80,6 +84,9 @@ class MarioState:
     x_speed: int = 0            # signed, 1/16 pixel per frame (positive = right)
     y_speed: int = 0            # signed, 1/16 pixel per frame (positive = down)
     in_air: bool = False
+    pipe_timer: int = 0
+    pipe_action: int = 0
+    rooms: int = 0
     yoshi_coins: int = 0
     bonus_stars: int = 0        # set when the goal bar is hit: 0 for a low hit, more the higher the bar was hit
     used_blocks: int = 0        # number of already-hit blocks in the level (rises on every block hit)
@@ -129,6 +136,7 @@ def read_state(ram):
         x_speed=u8(ram, PLAYER_X_SPEED) - 256 if u8(ram, PLAYER_X_SPEED) > 127 else u8(ram, PLAYER_X_SPEED),
         y_speed=u8(ram, PLAYER_Y_SPEED) - 256 if u8(ram, PLAYER_Y_SPEED) > 127 else u8(ram, PLAYER_Y_SPEED),
         in_air=u8(ram, IN_AIR) != 0,
+        pipe_timer=u8(ram, PIPE_TIMER), pipe_action=u8(ram, PIPE_ACTION), rooms=u8(ram, ROOMS),
         sprites=read_sprites(ram))
 
 

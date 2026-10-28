@@ -20,7 +20,10 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   `collect` (adds a coin grid and typed sprites: enemies, items, Yoshi/extended sprites skipped). Old modes keep their behaviour so old runs replay.
 - Reward terms (all in the config): progress, clear bonus, time penalty, death penalty, power-up bonus,
   coin bonus, **big (Yoshi) coin bonus**, **box-hit bonus**, **speed bonus** (rightward speed, from `$7B`),
-  **fast-clear bonus** (shrinks with frames), **goal bar bonus** (per bonus star; the game records how high the bar was hit in `$1900`). Collecting something worth reward resets the stuck timer, so going back for it is possible.
+  **fast-clear bonus** (shrinks with frames), **goal bar bonus** (per bonus star; the game records how high the bar was hit in `$1900`), **climb bonus** (`height_bonus`: per pixel of
+  new standing height, i.e. landing on something higher than ever before) and **pipe bonus** (`pipe_bonus`: entering a pipe downward, once per
+  pipe per episode; pipe entry = pipe timer `$88` starting with action `$89` = 3, verified on the pipe at x 3878 of Yoshi's Island 2;
+  coming out of the other side is action 7 and pays nothing). Collecting something worth reward resets the stuck timer, so going back for it is possible.
 - Collection **events** (coin, big coin, power-up, box hit with position and frame) are recorded with every best run.
 - Verified in game memory: coin = Map16 `0x2B`; big coin = pair `0x2D`/`0x2E` (counter `$1420`); a hit box turns into the
   used-block tile `0x132` (box tiles seen: `0x124`, `0x126`). Other box types are not yet verified.

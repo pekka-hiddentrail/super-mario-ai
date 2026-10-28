@@ -57,7 +57,7 @@
     <span><i class="sw" style="background:var(--solid)"></i>solid tile</span>
     <span><i class="sw" style="background:var(--coin)"></i>coin (dot) / big coin (outlined block)</span>
     <span><i class="sw" style="background:var(--box)"></i>box with something in it</span>
-    <span>on the best run: dot = coin picked up, ring = big coin, triangle = power-up, diamond = box hit</span>
+    <span>on the best run: dot = coin picked up, ring = big coin, triangle = power-up, diamond = box hit, blue square = pipe, blue dot = climbed higher</span>
     <span><i class="sw" style="background:var(--deco)"></i>other tile (blocks, decoration)</span>
     <span><i class="sw" style="background:var(--accent)"></i>run path - darker = higher fitness, lighter = lower</span>
     <span><i class="sw" style="background:var(--best)"></i>best run</span>
@@ -168,6 +168,8 @@ function drawEvents(t) {
     ctx.beginPath();
     if (kind === 'coin') { ctx.fillStyle = css('--coin'); ctx.arc(px, py, r * 0.8, 0, 7); }
     else if (kind === 'yoshi') { ctx.fillStyle = 'transparent'; ctx.arc(px, py, r * 1.6, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = css('--coin'); }
+    else if (kind === 'pipe') { ctx.fillStyle = css('--accent'); ctx.rect(px - r * 1.4, py - r * 1.4, r * 2.8, r * 2.8); }
+    else if (kind === 'climb') { ctx.fillStyle = css('--accent'); ctx.arc(px, py - r, r * 0.6, 0, 7); }
     else if (kind === 'powerup') { ctx.fillStyle = css('--item'); ctx.moveTo(px, py - r * 1.3); ctx.lineTo(px + r * 1.2, py + r); ctx.lineTo(px - r * 1.2, py + r); ctx.closePath(); }
     else { ctx.fillStyle = css('--box'); ctx.moveTo(px, py - r * 1.2); ctx.lineTo(px + r * 1.2, py); ctx.lineTo(px, py + r * 1.2); ctx.lineTo(px - r * 1.2, py); ctx.closePath(); }
     if (kind !== 'yoshi') ctx.fill();
@@ -183,7 +185,7 @@ async function loadEvents(run, token) {        // events of the best run, replay
   events = p.events || [];
   const n = k => events.filter(e => e[1] === k).length;
   $('status').textContent = `${paths.length} runs; best run (gen ${best.generation}) collected ${n('coin')} coins, ` +
-    `${n('yoshi')} big coins, ${n('powerup')} power-ups, hit ${n('block')} boxes`;
+    `${n('yoshi')} big coins, ${n('powerup')} power-ups, hit ${n('block')} boxes, ${n('pipe')} pipes, ${n('climb')} climbs`;
   redraw();
 }
 $('load').onclick = load; $('zoom').onchange = redraw; $('tiles').onchange = redraw;

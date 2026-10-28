@@ -113,6 +113,8 @@ def param_inputs(raw, prefix):
                            ("powerup_bonus", "Power-up bonus"), ("coin_bonus", "Coin bonus"),
                            ("yoshi_coin_bonus", "Big (Yoshi) coin bonus"), ("block_bonus", "Box hit bonus"),
                            ("goal_bar_bonus", "Goal bar bonus (per star: higher hit = more)"),
+                           ("height_bonus", "Climb bonus (per pixel higher than ever before)"),
+                           ("pipe_bonus", "Pipe bonus (down a pipe, once per pipe)"),
                            ("speed_bonus", "Speed bonus (per px/frame running)"),
                            ("clear_time_bonus", "Fast-clear bonus (shrinks with time)"),
                            ("clear_time_ref", "...reaches zero at N frames")]:

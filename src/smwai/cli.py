@@ -1,0 +1,38 @@
+"""Command line interface: smwai train | replay."""
+import argparse
+import json
+from pathlib import Path
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="smwai")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    t = sub.add_parser("train", help="train with NEAT")
+    t.add_argument("--config", default="configs/level1.toml")
+    t.add_argument("--generations", type=int)
+    t.add_argument("--workers", type=int)
+    t.add_argument("--run-dir")
+    t.add_argument("--resume", help="path to a ckpt-N file in a run dir")
+
+    r = sub.add_parser("replay", help="re-run a recorded generation headless and check it")
+    r.add_argument("run_dir")
+    r.add_argument("generation", type=int)
+
+    args = ap.parse_args(argv)
+    from . import config, train
+
+    if args.cmd == "train":
+        cfg = config.load(args.config)
+        train.train(cfg, args.config, resume=args.resume, run_dir=args.run_dir,
+                    generations=args.generations, workers=args.workers)
+    else:
+        run = Path(args.run_dir)
+        train._ENV_CFG = config.load(run / "config.toml").env
+        rec = json.loads((run / "best" / f"gen_{args.generation:04d}.json").read_text())
+        reward, info = train.replay_actions(rec["actions"])
+        print(f"recorded fitness {rec['fitness']:.1f}, replayed {reward:.1f}, max_x {info['max_x']}")
+
+
+if __name__ == "__main__":
+    main()

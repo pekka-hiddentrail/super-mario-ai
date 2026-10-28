@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 
 import gymnasium as gym
 import numpy as np
-import stable_retro as retro
 from gymnasium import spaces
 
 from . import ram as R
@@ -52,6 +51,8 @@ class SmwEnv(gym.Env):
         self.frame = None
 
     def _open(self, level):
+        import stable_retro as retro  # Linux/WSL only; imported lazily so config/tests work anywhere
+
         if self._env is not None and self._level == level:
             return
         if self._env is not None:

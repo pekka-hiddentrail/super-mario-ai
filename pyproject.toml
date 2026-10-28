@@ -8,10 +8,14 @@ version = "0.1.0"
 description = "Learning to play Super Mario World with NEAT and modern RL"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["numpy", "gymnasium", "neat-python"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]
+emu = ["stable-retro"]   # Linux/WSL only (no Windows wheels)
+
+[project.scripts]
+smwai = "smwai.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

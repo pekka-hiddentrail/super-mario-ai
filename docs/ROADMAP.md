@@ -25,6 +25,8 @@ Status: done = in `main`/branch, next = planned order, later = wanted but not sc
 - Needs: store x/y trajectory per recorded run (cheap; add to `best/gen_NNNN.json`).
 
 ## Learning ideas (experiment ladder)
+Status: runner built (`smwai experiment`), pilot ladder on Yoshi Island 3 in `configs/experiments/ladder_yi3.toml`.
+Speed rewards exist (`speed_bonus`, `clear_time_bonus`) but are not yet part of a ladder run.
 - Reward: time penalty so faster clears score higher (once the level is cleared, plain
   progress reward has nothing left to optimise).
 - Reward: power-up and coin bonuses, off by default.

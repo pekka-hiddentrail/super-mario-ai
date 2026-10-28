@@ -47,3 +47,15 @@ scripts/smwai.sh train          # or train from the CLI with configs/level1.toml
 scripts/view.sh                 # replay viewer only: http://localhost:8765
 scripts/test.sh                 # tests
 ```
+
+## Experiments (inside WSL)
+
+```bash
+scripts/experiment.sh configs/experiments/ladder_yi3.toml    # variants x seeds, one summary table
+scripts/experiment.sh configs/experiments/ladder_yi3.toml --summary-only
+scripts/video.sh                                             # mp4 of each run's best generation
+scripts/restart_viewer.sh                                    # replay / path map / videos on :8765
+```
+An experiment spec names a base config and variants that each override single settings. Every run is
+saved under `runs/exp-<experiment>-<variant>-s<seed>/` and the table lands in `runs/_experiments/<name>/summary.md`.
+Metrics include emulator frames used (`frames`, `total_frames` in `metrics.csv`), so methods can be compared per frame of experience.

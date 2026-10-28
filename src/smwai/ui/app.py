@@ -108,9 +108,12 @@ def param_inputs(raw, live_mode, prefix):
         st.markdown("**Reward**")
         for key, label in [("progress", "Per pixel of progress"), ("clear_bonus", "Clear bonus"),
                            ("time_penalty", "Penalty per frame"), ("death_penalty", "Death penalty"),
-                           ("powerup_bonus", "Power-up bonus"), ("coin_bonus", "Coin bonus")]:
-            raw["reward"][key] = st.number_input(label, value=float(raw["reward"].get(key, 0.0)), step=0.1,
-                                                 format="%.2f", key=prefix + key)
+                           ("powerup_bonus", "Power-up bonus"), ("coin_bonus", "Coin bonus"),
+                           ("speed_bonus", "Speed bonus (per px/frame running)"),
+                           ("clear_time_bonus", "Fast-clear bonus (shrinks with time)"),
+                           ("clear_time_ref", "...reaches zero at N frames")]:
+            raw["reward"][key] = st.number_input(label, value=float(raw["reward"].get(key, 3000.0 if key == "clear_time_ref" else 0.0)),
+                                                 step=0.1, format="%.2f", key=prefix + key)
     with c3:
         st.markdown("**NEAT**")
         for key, label in [("conn_add_prob", "Add connection"), ("conn_delete_prob", "Delete connection"),

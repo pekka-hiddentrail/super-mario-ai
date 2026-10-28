@@ -97,7 +97,7 @@ def train_ppo(cfg, config_path, run_dir=None, steps=None, n_envs=None):
     # the worker processes must be created before this process opens its own emulator
     vec = SubprocVecEnv([_make_env(cfg.env, p["reward_scale"]) for _ in range(n_envs)], start_method="fork")
     csv = run_dir / "metrics.csv"
-    csv.write_text("generation,best,mean,species,max_x,seconds,deterministic\n")
+    csv.write_text("generation,best,mean,species,max_x,seconds,deterministic,frames,total_frames\n")
 
     class Recorder(BaseCallback):
         def __init__(self):
@@ -127,7 +127,9 @@ def train_ppo(cfg, config_path, run_dir=None, steps=None, n_envs=None):
             mean = float(np.mean(self.returns[-30:])) if self.returns else 0.0
             secs = time.time() - self.t0
             with open(csv, "a") as f:
-                f.write(f"{n},{ret:.1f},{mean:.1f},0,{info['max_x']},{secs:.1f},1\n")
+                fs = cfg.env.frame_skip
+                f.write(f"{n},{ret:.1f},{mean:.1f},0,{info['max_x']},{secs:.1f},1,"
+                        f"{p['eval_every'] * fs},{self.num_timesteps * fs}\n")
             print(f"round {n:4d}  steps {self.num_timesteps:8d}  eval {ret:8.1f}  train mean {mean:8.1f}  "
                   f"max_x {info['max_x']:5d}  {'CLEARED' if info['cleared'] else ''}", flush=True)
             self.round += 1

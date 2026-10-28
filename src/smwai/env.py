@@ -24,6 +24,9 @@ class RewardConfig:
     clear_bonus: float = 1000.0
     powerup_bonus: float = 0.0     # per power-up state increase
     coin_bonus: float = 0.0
+    speed_bonus: float = 0.0       # per (pixel/frame of rightward speed) per frame, i.e. rewards running
+    clear_time_bonus: float = 0.0  # on clear: this * max(0, 1 - frames / clear_time_ref); faster = more
+    clear_time_ref: float = 3000.0 # frames at which the clear-time bonus has shrunk to zero
 
 
 @dataclass
@@ -137,6 +140,7 @@ class SmwEnv(gym.Env):
             self.stuck = 0
         else:
             self.stuck += self.cfg.frame_skip
+        reward += rc.speed_bonus * max(0.0, self.state.x_speed / 16.0) * self.cfg.frame_skip
         reward += rc.powerup_bonus * max(0, self.state.powerup - prev.powerup)
         reward += rc.coin_bonus * max(0, self.state.coins - prev.coins)
         died = self.state.dying or self.state.lives < prev.lives
@@ -145,6 +149,7 @@ class SmwEnv(gym.Env):
             reward -= rc.death_penalty
         if cleared:
             reward += rc.clear_bonus
+            reward += rc.clear_time_bonus * max(0.0, 1.0 - self.frames / rc.clear_time_ref)
         terminated = died or cleared
         truncated = self.stuck >= self.cfg.stuck_frames or self.frames >= self.cfg.max_frames
         info = self._info()

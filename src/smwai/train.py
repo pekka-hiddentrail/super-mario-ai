@@ -95,12 +95,43 @@ def eval_genome(genome, config):
     return run_episode(genome, config)[0]
 
 
+def eval_genome_full(genome, config):
+    """(fitness, emulator frames used) so experiments can compare methods per frame of experience."""
+    _sync_live_settings()
+    total, _, info = run_episode(genome, config)
+    return total, info["frames"]
+
+
+class PoolEvaluator:
+    """Evaluates a generation on a worker pool (or serially) and counts the emulator frames used."""
+
+    def __init__(self, n_workers):
+        import multiprocessing
+        self.pool = multiprocessing.Pool(n_workers) if n_workers > 1 else None
+        self.last_frames = 0
+
+    def evaluate(self, genomes, config):
+        if self.pool is not None:
+            jobs = [self.pool.apply_async(eval_genome_full, (g, config)) for _, g in genomes]
+            results = [j.get() for j in jobs]
+        else:
+            results = [eval_genome_full(g, config) for _, g in genomes]
+        for (_, genome), (fitness, _frames) in zip(genomes, results):
+            genome.fitness = fitness
+        self.last_frames = sum(frames for _, frames in results)
+
+    def close(self):
+        if self.pool is not None:
+            self.pool.terminate()
+
+
 class RunReporter(neat.reporting.BaseReporter):
     """Writes metrics.csv and records the best run of every generation."""
 
-    def __init__(self, run_dir, neat_cfg):
+    def __init__(self, run_dir, neat_cfg, evaluator=None):
         self.dir = Path(run_dir)
         self.neat_cfg = neat_cfg
+        self.evaluator = evaluator
         self.applied = None
         (self.dir / "best").mkdir(parents=True, exist_ok=True)
         self.generation = -1
@@ -108,7 +139,13 @@ class RunReporter(neat.reporting.BaseReporter):
         self.best_ever = -np.inf
         self.csv = self.dir / "metrics.csv"
         if not self.csv.exists():
-            self.csv.write_text("generation,best,mean,species,max_x,seconds,deterministic\n")
+            self.csv.write_text("generation,best,mean,species,max_x,seconds,deterministic,frames,total_frames\n")
+        header = self.csv.read_text().splitlines()[0]
+        self.with_frames = "total_frames" in header          # runs started before frame counting keep their format
+        self.total_frames = 0
+        for line in self.csv.read_text().splitlines()[1:]:
+            if self.with_frames and line.count(",") >= 8:
+                self.total_frames = int(float(line.split(",")[8]))
 
     def start_generation(self, generation):
         self.generation = generation
@@ -146,9 +183,14 @@ class RunReporter(neat.reporting.BaseReporter):
                 pickle.dump(best, f)
         secs = time.time() - self.gen_start
         n_species = len(species.species)
+        frames = self.evaluator.last_frames if self.evaluator is not None else 0
+        self.total_frames += frames
+        row = (f"{self.generation},{best.fitness:.1f},{np.mean(fits):.1f},{n_species},"
+               f"{info['max_x']},{secs:.1f},{int(deterministic)}")
+        if self.with_frames:
+            row += f",{frames},{self.total_frames}"
         with open(self.csv, "a") as f:
-            f.write(f"{self.generation},{best.fitness:.1f},{np.mean(fits):.1f},{n_species},"
-                    f"{info['max_x']},{secs:.1f},{int(deterministic)}\n")
+            f.write(row + "\n")
         flag = "" if deterministic else "  (replay differs!)"
         print(f"gen {self.generation:4d}  best {best.fitness:8.1f}  mean {np.mean(fits):8.1f}  "
               f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}", flush=True)
@@ -170,21 +212,18 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
     neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
                            neat.DefaultStagnation, str(run_dir / "neat.cfg"))
     pop = neat.Checkpointer.restore_checkpoint(resume) if resume else neat.Population(neat_cfg)
-    pop.add_reporter(RunReporter(run_dir, pop.config))
-    pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     global _ACTIVE
     _ACTIVE = str(run_dir / "active.json")      # set before the worker pool forks
     n_workers = cfg.workers if workers is None else workers
-    if n_workers > 1:
-        # the pool must fork before this process creates its own emulator
-        evaluate = neat.ParallelEvaluator(n_workers, eval_genome).evaluate
-    else:
-        def evaluate(genomes, config):
-            for _, genome in genomes:
-                genome.fitness = eval_genome(genome, config)
+    # the pool must fork before this process creates its own emulator
+    evaluator = PoolEvaluator(n_workers)
+    pop.add_reporter(RunReporter(run_dir, pop.config, evaluator))
+    pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:
-        pop.run(evaluate, generations or cfg.generations)
+        pop.run(evaluator.evaluate, generations or cfg.generations)
     except KeyboardInterrupt:
         print("\ninterrupted; results so far are in", run_dir)
+    finally:
+        evaluator.close()
     return run_dir

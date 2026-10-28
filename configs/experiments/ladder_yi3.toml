@@ -1,0 +1,27 @@
+# Experiment ladder, pilot: which single change helps NEAT most on Yoshi Island 3?
+# One change per variant, everything else as in configs/yi3.toml. Two seeds = a first ranking,
+# not a verdict; add seeds (e.g. [1, 2, 3, 4]) to firm it up. Run: smwai experiment --spec <this file>
+name = "ladder-yi3"
+base = "configs/yi3.toml"
+seeds = [1, 2]
+generations = 15
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "baseline"            # mixed tile grid, default NEAT settings
+
+[[variant]]
+name = "collect"             # separate solid/enemy/item/coin grids + water, Yoshi, power-up
+[variant.env]
+inputs = "collect"
+
+[[variant]]
+name = "diverse"             # more, smaller species: lower compatibility threshold
+[variant.neat]
+compatibility_threshold = 1.5
+
+[[variant]]
+name = "patient"             # let a run keep trying twice as long without progress
+[variant.env]
+stuck_frames = 240

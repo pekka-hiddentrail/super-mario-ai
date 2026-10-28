@@ -108,3 +108,11 @@ def test_coin_grid_and_sprite_kinds():
     assert enemy.sum() == 1 and enemy[6, 8] == 1 and item.sum() == 0   # Yoshi + extended sprite skipped
     legacy_enemy, _ = R.sprite_grids(st, legacy=True)
     assert legacy_enemy.sum() == 3                                       # old behaviour kept
+
+
+def test_x_speed_is_signed():
+    w = make_wram()
+    w[R.PLAYER_X_SPEED] = 0x30
+    assert R.read_state(w).x_speed == 0x30
+    w[R.PLAYER_X_SPEED] = 0xF0
+    assert R.read_state(w).x_speed == -16

@@ -21,6 +21,11 @@ def main(argv=None):
     pp.add_argument("--envs", type=int, help="parallel emulators")
     pp.add_argument("--run-dir")
 
+    ex = sub.add_parser("experiment", help="run variants x seeds from a spec and summarise")
+    ex.add_argument("--spec", required=True)
+    ex.add_argument("--runs-dir", default="runs")
+    ex.add_argument("--summary-only", action="store_true", help="do not train, just rebuild the table")
+
     vd = sub.add_parser("video", help="render the best run of each training run to mp4")
     vd.add_argument("--runs-dir", default="runs")
     vd.add_argument("--run", help="only this run (folder name)")
@@ -52,6 +57,10 @@ def main(argv=None):
     if args.cmd == "view":
         from .viewer.server import serve
         return serve(args.runs_dir, args.port)
+    if args.cmd == "experiment":
+        from .experiment import run_experiment
+        run_experiment(args.spec, args.runs_dir, args.summary_only)
+        return
     if args.cmd == "video":
         from . import video
         runs = [Path(args.runs_dir) / args.run] if args.run else sorted(

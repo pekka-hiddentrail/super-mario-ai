@@ -72,34 +72,42 @@ let runs = [], level = null, paths = [];
 async function init() {
   runs = await (await fetch('/api/runs')).json();
   $('run').innerHTML = runs.map(r => `<option>${r.name}</option>`).join('');
-  $('run').onchange = setRange; setRange();
+  $('run').onchange = () => { setRange(); load(); };
   const q = new URLSearchParams(location.search);
-  if (q.get('run')) { $('run').value = q.get('run'); setRange(); }
-  if (q.get('autoload')) load();
+  if (q.get('run') && runs.some(r => r.name === q.get('run'))) $('run').value = q.get('run');
+  setRange();
+  if (q.get('autoload') !== '0') load();       // open with the map already drawn
 }
 function setRange() {
   const r = runs.find(x => x.name === $('run').value);
   if (r && r.gens.length) { $('from').value = r.gens[0].gen; $('to').value = r.gens[r.gens.length - 1].gen; }
 }
+let loadToken = 0;
 async function load() {
+  const token = ++loadToken;                  // a newer load cancels an older one
   const run = $('run').value, r = runs.find(x => x.name === run);
+  if (!r) { $('status').textContent = 'no runs with recorded generations yet'; return; }
   const gens = r.gens.filter(g => g.gen >= +$('from').value && g.gen <= +$('to').value
                                   && (g.gen - +$('from').value) % +$('step').value === 0);
-  $('load').disabled = true; paths = [];
+  $('load').disabled = false; paths = []; level = null; $('rows').innerHTML = '';
+  cv.width = 800; cv.height = 60; ctx.clearRect(0, 0, 800, 60);
+  ctx.fillStyle = css('--muted'); ctx.font = '14px system-ui'; ctx.fillText('Loading level map...', 12, 34);
   try {
     $('status').textContent = 'loading level map...';
     const lv = await (await fetch(`/api/level?run=${encodeURIComponent(run)}`)).json();
     if (lv.error) throw new Error(lv.error);
+    if (token !== loadToken) return;
     level = lv; redraw();
     for (let i = 0; i < gens.length; i++) {
       $('status').textContent = `loading paths ${i + 1}/${gens.length} (a run not recorded with a path is replayed once)...`;
       const p = await (await fetch(`/api/path?run=${encodeURIComponent(run)}&gen=${gens[i].gen}`)).json();
+      if (token !== loadToken) return;
       if (p.error) throw new Error(p.error);
       paths.push(p); redraw();
     }
     $('status').textContent = `${paths.length} runs`;
   } catch (e) { $('status').textContent = 'error: ' + e.message; }
-  $('load').disabled = false;
+  if (token === loadToken) $('load').disabled = false;
 }
 function redraw() {
   if (!level) return;

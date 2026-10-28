@@ -38,3 +38,12 @@ Put your ROM in `roms/` (not committed). Expected SHA1: _TBD after verification.
 ```bash
 python tools/parse_ram_map.py docs/smw_ram_map.html docs/smw_ram_map.json
 ```
+
+## Daily use (inside WSL, from the repo root)
+
+```bash
+scripts/ui.sh                   # dashboard: http://localhost:8501 (curves, train form, replay, path map)
+scripts/smwai.sh train          # or train from the CLI with configs/level1.toml
+scripts/view.sh                 # replay viewer only: http://localhost:8765
+scripts/test.sh                 # tests
+```

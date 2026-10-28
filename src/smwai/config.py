@@ -94,8 +94,31 @@ class RunConfig:
         return NEAT_TEMPLATE.format(n_inputs=self.n_inputs, n_outputs=len(BUTTONS), **self.neat)
 
 
+def load_raw(path):
+    return tomllib.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def _toml_value(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, str):
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    return repr(v)
+
+
+def dump(raw):
+    """Write a dict of scalar/list values in sections to TOML text (comments are not kept)."""
+    out = [f"{k} = {_toml_value(v)}" for k, v in raw.items() if not isinstance(v, dict)]
+    for section, body in raw.items():
+        if isinstance(body, dict):
+            out += ["", f"[{section}]"] + [f"{k} = {_toml_value(v)}" for k, v in body.items()]
+    return "\n".join(out) + "\n"
+
+
 def load(path):
-    raw = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+    raw = load_raw(path)
     env = EnvConfig(**raw.get("env", {}), reward=RewardConfig(**raw.get("reward", {})))
     train = raw.get("train", {})
     return RunConfig(

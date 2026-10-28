@@ -36,3 +36,4 @@ states/*
 .idea/
 .DS_Store
 Thumbs.db
+configs/custom/

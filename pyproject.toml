@@ -12,6 +12,7 @@ dependencies = ["numpy", "gymnasium", "neat-python", "pillow"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]
+ui = ["streamlit"]
 emu = ["stable-retro"]   # Linux/WSL only (no Windows wheels)
 
 [project.scripts]

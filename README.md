@@ -22,8 +22,8 @@ Goal order: Yoshi's Island 1 first, then more levels.
 ```bash
 python -m venv .venv
 .venv\Scripts\activate        # Windows
-pip install -e ".[dev]"
-pytest
+bash scripts/wsl_install_deps.sh   # inside WSL
+scripts/test.sh
 ```
 
 Put your ROM in `roms/` (not committed). Expected SHA1: _TBD after verification._

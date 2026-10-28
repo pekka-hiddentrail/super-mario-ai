@@ -129,3 +129,9 @@ def test_used_blocks_and_yoshi_coins():
     w[R.YOSHI_COINS] = 2
     st = R.read_state(w)
     assert st.used_blocks == 2 and st.yoshi_coins == 2
+
+
+def test_bonus_stars_read_from_goal_bar_counter():
+    w = make_wram()
+    w[R.BONUS_STARS] = 25
+    assert R.read_state(w).bonus_stars == 25

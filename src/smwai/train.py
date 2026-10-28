@@ -1,6 +1,5 @@
 """NEAT training: parallel episode evaluation, per-generation best-run recording."""
 import json
-import os
 import pickle
 import random
 import shutil
@@ -10,13 +9,11 @@ from pathlib import Path
 import neat
 import numpy as np
 
-from . import live
+from . import neat_params
 from .env import BUTTONS, SmwEnv
 
 _ENV_CFG = None   # set before the worker pool forks
 _ENV = None       # one emulator per process (stable-retro allows only one)
-_ACTIVE = None    # path of active.json; workers re-read it when it changes
-_ACTIVE_MTIME = None
 
 
 def _get_env():
@@ -76,28 +73,12 @@ def replay_actions(masks):
     return total, info
 
 
-def _sync_live_settings():
-    """Workers pick up reward/env changes published by the main process (once per generation)."""
-    global _ACTIVE_MTIME
-    if not _ACTIVE:
-        return
-    try:
-        mtime = os.stat(_ACTIVE).st_mtime_ns
-    except OSError:
-        return
-    if mtime != _ACTIVE_MTIME:
-        _ACTIVE_MTIME = mtime
-        live.apply_env(_ENV_CFG, live.read_overrides(_ACTIVE))
-
-
 def eval_genome(genome, config):
-    _sync_live_settings()
     return run_episode(genome, config)[0]
 
 
 def eval_genome_full(genome, config):
     """(fitness, emulator frames used) so experiments can compare methods per frame of experience."""
-    _sync_live_settings()
     total, _, info = run_episode(genome, config)
     return total, info["frames"]
 
@@ -134,7 +115,6 @@ class RunReporter(neat.reporting.BaseReporter):
         self.adapt = adapt or {}
         self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
         self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
-        self.applied = None
         (self.dir / "best").mkdir(parents=True, exist_ok=True)
         self.generation = -1
         self.gen_start = time.time()
@@ -152,20 +132,6 @@ class RunReporter(neat.reporting.BaseReporter):
     def start_generation(self, generation):
         self.generation = generation
         self.gen_start = time.time()
-        self._apply_overrides()
-
-    def _apply_overrides(self):
-        """Apply dashboard changes (overrides.json) before this generation is evaluated."""
-        ov = live.read_overrides(self.dir / "overrides.json")
-        if ov == self.applied or (not ov and self.applied is None):
-            return
-        self.applied = ov
-        changed = {**live.apply_env(_ENV_CFG, ov), **live.apply_neat(self.neat_cfg, ov)}
-        live.write_json_atomic(self.dir / "active.json", ov)      # workers read this
-        if changed:
-            with open(self.dir / "events.jsonl", "a") as f:
-                f.write(json.dumps({"generation": self.generation, "changed": changed}) + "\n")
-            print(f"gen {self.generation}: applied live changes {changed}", flush=True)
 
     def _adapt_mutation(self, best_fitness):
         """When the best fitness stops improving, mutate harder until it improves again."""
@@ -190,7 +156,7 @@ class RunReporter(neat.reporting.BaseReporter):
         elif self.stall == 0 and self.boosted:
             change, self.boosted, kind = dict(self.adapt_base), False, "restore"
         if change:
-            live.apply_neat(self.neat_cfg, {"neat": change})
+            neat_params.apply_neat(self.neat_cfg, change)
             with open(self.dir / "events.jsonl", "a") as f:
                 f.write(json.dumps({"generation": self.generation, "adaptive": kind, "changed": change}) + "\n")
             print(f"gen {self.generation}: adaptive mutation {kind} (stalled {self.stall} generations)", flush=True)
@@ -243,8 +209,6 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
     neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
                            neat.DefaultStagnation, str(run_dir / "neat.cfg"))
     pop = neat.Checkpointer.restore_checkpoint(resume) if resume else neat.Population(neat_cfg)
-    global _ACTIVE
-    _ACTIVE = str(run_dir / "active.json")      # set before the worker pool forks
     n_workers = cfg.workers if workers is None else workers
     # the pool must fork before this process creates its own emulator
     stats = {"frames": 0}

@@ -18,9 +18,9 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 - Gymnasium env on stable-retro; state read from WRAM; 8 buttons; frame skip 4.
 - Input modes (`env.inputs`): `mixed` (one tile grid, 169 inputs), `channels` (solid/enemy/item grids + water, Yoshi, power-up),
   `collect` (adds a coin grid and typed sprites: enemies, items, Yoshi/extended sprites skipped). Old modes keep their behaviour so old runs replay.
-- Reward terms (all in the config, live-tunable): progress, clear bonus, time penalty, death penalty, power-up bonus,
+- Reward terms (all in the config): progress, clear bonus, time penalty, death penalty, power-up bonus,
   coin bonus, **big (Yoshi) coin bonus**, **box-hit bonus**, **speed bonus** (rightward speed, from `$7B`),
-  **fast-clear bonus** (shrinks with frames). Collecting something worth reward resets the stuck timer, so going back for it is possible.
+  **fast-clear bonus** (shrinks with frames), **goal bar bonus** (per bonus star; the game records how high the bar was hit in `$1900`). Collecting something worth reward resets the stuck timer, so going back for it is possible.
 - Collection **events** (coin, big coin, power-up, box hit with position and frame) are recorded with every best run.
 - Verified in game memory: coin = Map16 `0x2B`; big coin = pair `0x2D`/`0x2E` (counter `$1420`); a hit box turns into the
   used-block tile `0x132` (box tiles seen: `0x124`, `0x126`). Other box types are not yet verified.
@@ -31,7 +31,6 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 - **Adaptive mutation** (`[adapt]` in a config, off by default): when the best fitness has not improved by at least
   `min_improvement` for N generations, mutation is boosted until it does; logged to `events.jsonl`.
   Best result so far on Yoshi's Island 1 (3 of 3 seeds better than baseline); see Findings. Recommended config: `configs/yi1_adaptive.toml`.
-- Live parameter tuning: change reward, episode limits and NEAT rates while a run is going (applied at the next generation).
 - PPO (stable-baselines3, CPU only: this PC has only an Intel GPU): `smwai train-ppo`, button combos, same run folder format.
   First version; eval is unstable and there is no resume.
 - Experiment runner (`smwai experiment`, `configs/experiments/`): variants x seeds under one budget, summary table in
@@ -42,7 +41,7 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 - Path map (`:8765/map`, opens already drawn): whole level from the Map16 tables, paths per generation (darker = fitter, best in orange),
   death marks, goal flag, **big coins and boxes marked, and what the best run collected** (dot = coin, ring = big coin, triangle = power-up, diamond = box hit).
 - Best-run videos (`scripts/video.sh`, `:8765/videos`): mp4 at 60 fps with a caption strip.
-- Streamlit dashboard (`scripts/ui.sh`, `:8501`): curves for several runs, train form (NEAT and PPO), live tuning, replay, path map, videos.
+- Streamlit dashboard (`scripts/ui.sh`, `:8501`): curves for several runs, train form (NEAT and PPO), replay, path map, videos.
 - Helper scripts: `stop_run.sh`, `list_runs.sh`, `restart_viewer.sh`, probes (`probe_levels.py`, `probe_collectibles.py`, ...).
 
 ## Findings so far

@@ -14,22 +14,59 @@ _emu_lock = threading.Lock()      # one emulator per process
 _NAME = re.compile(r"^(?!\.)[\w.\-]+$")      # no leading dot: blocks '..' path tricks
 
 
+def _gen_summaries(best_dir):
+    """[{gen, fitness, max_x, cleared}] for a run, read from a small index.json that is updated
+    incrementally (the generation files are large; opening all of them made the page slow)."""
+    index_file = best_dir / "index.json"
+    try:
+        index = json.loads(index_file.read_text())
+    except (OSError, ValueError):
+        index = {}
+    present = {f.name: f for f in best_dir.glob("gen_*.json")}
+    changed = False
+    for name in sorted(present):
+        if name in index:                        # known generation: trust it (a stat per file is slow on /mnt/c)
+            continue
+        try:
+            rec = json.loads(present[name].read_text())
+        except ValueError:                       # being written by a running trainer right now
+            continue
+        index[name] = {"gen": rec["generation"], "fitness": rec["fitness"], "max_x": rec["max_x"],
+                       "cleared": rec["cleared"]}
+        changed = True
+    for name in [k for k in index if k not in present]:
+        del index[name]
+        changed = True
+    if changed:
+        index_file.write_text(json.dumps(index))
+    return [{k: index[n][k] for k in ("gen", "fitness", "max_x", "cleared")} for n in sorted(index)]
+
+
+def _run_time(run_dir):
+    """When the run was last active: newest runs are listed first."""
+    for name in ("metrics.csv", "best"):
+        f = run_dir / name
+        if f.exists():
+            return f.stat().st_mtime
+    return 0.0
+
+
 def list_runs(runs_dir):
+    """Runs with recorded generations, newest first."""
     runs = []
-    for run in sorted(Path(runs_dir).glob("*/best"), reverse=True):
-        gens = []
-        for p in sorted(run.glob("gen_*.json")):
-            rec = json.loads(p.read_text())
-            gens.append({"gen": rec["generation"], "fitness": rec["fitness"],
-                         "max_x": rec["max_x"], "cleared": rec["cleared"]})
-        runs.append({"name": run.parent.name, "gens": gens})
+    for best in Path(runs_dir).glob("*/best"):
+        runs.append({"name": best.parent.name, "gens": _gen_summaries(best), "_t": _run_time(best.parent)})
+    runs.sort(key=lambda r: r["_t"], reverse=True)
+    for r in runs:
+        del r["_t"]
     return runs
 
 
 def list_videos(runs_dir):
-    """Runs that have rendered videos, with the metrics needed to describe them."""
+    """Runs that have rendered videos, with the metrics needed to describe them (newest run first)."""
     out = []
-    for vdir in sorted(Path(runs_dir).glob("*/videos"), reverse=True):
+    vdirs = sorted(Path(runs_dir).glob("*/videos"), key=lambda v: _run_time(v.parent), reverse=True)
+    for vdir in vdirs:
         run = vdir.parent
         for mp4 in sorted(vdir.glob("*.mp4")):
             gen = int(mp4.stem.split("_")[-1])

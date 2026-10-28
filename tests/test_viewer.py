@@ -90,3 +90,25 @@ def test_run_path_returns_recorded_events(tmp_path):
         {"generation": 1, "fitness": 5.0, "max_x": 9, "cleared": True, "actions": [], "path": [[0, 1]], "events": ev}))
     assert "events" not in run_path(tmp_path / "r", 1)
     assert run_path(tmp_path / "r", 1, events=True)["events"] == ev
+
+
+def test_list_runs_newest_first_and_uses_index(tmp_path):
+    import os
+    import time
+
+    for name, age in [("old", 300), ("new", 0), ("mid", 100)]:
+        best = tmp_path / name / "best"
+        best.mkdir(parents=True)
+        (best / "gen_0000.json").write_text(json.dumps(
+            {"generation": 0, "fitness": 1.0, "max_x": 5, "cleared": False, "actions": [0]}))
+        metrics = tmp_path / name / "metrics.csv"
+        metrics.write_text("generation\n0\n")
+        t = time.time() - age
+        os.utime(metrics, (t, t))
+    runs = list_runs(tmp_path)
+    assert [r["name"] for r in runs] == ["new", "mid", "old"]
+    assert (tmp_path / "new" / "best" / "index.json").exists()
+    # second call reads the index, even if the big generation file is now unreadable
+    (tmp_path / "new" / "best" / "gen_0000.json").write_text("{broken")
+    again = list_runs(tmp_path)
+    assert again[0]["gens"][0]["fitness"] == 1.0

@@ -1,4 +1,4 @@
-"""Streamlit dashboard: training curves, start/stop runs, live tuning, replay and path map."""
+"""Streamlit dashboard: training curves, start/stop runs, replay, path map and videos."""
 import json
 import os
 import signal
@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from smwai import config, live
+from smwai import config
 
 ROOT = Path(os.environ.get("SMWAI_ROOT", ".")).resolve()
 RUNS = ROOT / "runs"
@@ -36,7 +36,9 @@ def ensure_viewer():
 
 
 def run_names():
-    return sorted((p.name for p in RUNS.glob("*") if (p / "metrics.csv").exists()), reverse=True)
+    """Runs with metrics, newest (most recently active) first."""
+    runs = [p for p in RUNS.glob("*") if (p / "metrics.csv").exists()]
+    return [p.name for p in sorted(runs, key=lambda p: (p / "metrics.csv").stat().st_mtime, reverse=True)]
 
 
 def metrics(name):
@@ -85,18 +87,18 @@ def viewer_frame(path, height):
     components.iframe(f"http://localhost:{VIEWER_PORT}{path}", height=height, scrolling=True)
 
 
-def param_inputs(raw, live_mode, prefix):
+def param_inputs(raw, prefix):
     """Number inputs for the tunable settings; edits `raw` in place. Returns (generations, workers)."""
     c1, c2, c3 = st.columns(3)
     generations, workers = raw["train"].get("generations", 100), raw["train"].get("workers", 4)
     with c1:
-        st.markdown("**Episode limits**" if live_mode else "**Training**")
-        if not live_mode:
+        st.markdown("**Training**")
+        if True:
             generations = st.number_input("Generations", 1, 10000, int(generations), key=prefix + "gens")
             workers = st.number_input("Parallel emulators", 1, 32, int(workers), key=prefix + "workers")
             raw["neat"]["pop_size"] = st.number_input("Population", 10, 2000, int(raw["neat"]["pop_size"]),
                                                       key=prefix + "pop")
-        if not live_mode:
+        if True:
             modes = ["mixed", "channels", "collect"]
             raw["env"]["inputs"] = st.selectbox("Network inputs", modes, key=prefix + "inputs",
                                                 index=modes.index(raw["env"].get("inputs", "mixed")),
@@ -110,6 +112,7 @@ def param_inputs(raw, live_mode, prefix):
                            ("time_penalty", "Penalty per frame"), ("death_penalty", "Death penalty"),
                            ("powerup_bonus", "Power-up bonus"), ("coin_bonus", "Coin bonus"),
                            ("yoshi_coin_bonus", "Big (Yoshi) coin bonus"), ("block_bonus", "Box hit bonus"),
+                           ("goal_bar_bonus", "Goal bar bonus (per star: higher hit = more)"),
                            ("speed_bonus", "Speed bonus (per px/frame running)"),
                            ("clear_time_bonus", "Fast-clear bonus (shrinks with time)"),
                            ("clear_time_ref", "...reaches zero at N frames")]:
@@ -133,8 +136,8 @@ def param_inputs(raw, live_mode, prefix):
 # ---------- layout ----------
 ensure_viewer()
 st.title("Super Mario World AI")
-tab_runs, tab_train, tab_live, tab_replay, tab_map, tab_video = st.tabs(
-    ["Runs", "Train", "Live tuning", "Replay", "Path map", "Videos"])
+tab_runs, tab_train, tab_replay, tab_map, tab_video = st.tabs(
+    ["Runs", "Train", "Replay", "Path map", "Videos"])
 
 with tab_runs:
     names = run_names()
@@ -170,7 +173,7 @@ with tab_train:
     raw = config.load_raw(base)
     with st.form("train"):
         name = st.text_input("Run name", value=f"{raw.get('name', 'run')}-custom")
-        generations, workers = param_inputs(raw, False, "t_")
+        generations, workers = param_inputs(raw, "t_")
         go = st.form_submit_button("Start training", type="primary")
     if go:
         safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in name).strip("-") or "run"
@@ -226,38 +229,6 @@ with tab_train:
             st.rerun()
         if c3.checkbox("Log", key=f"log-{info['name']}"):
             st.code("\n".join(Path(info["log"]).read_text().splitlines()[-15:]) or "(empty)")
-
-with tab_live:
-    st.caption("Changes are applied at the start of the next generation, for runs that use this version of "
-               "the trainer. Runs started before live tuning existed ignore them. Note that changing the "
-               "reward changes what 'fitness' means, so numbers before and after are not directly comparable.")
-    neat_runs = [n for n in run_names() if (RUNS / n / "neat.cfg").exists()]     # PPO runs can't be tuned live yet
-    candidates = [n for n in neat_runs if is_running(n)] or neat_runs
-    if not candidates:
-        st.info("No NEAT runs yet.")
-    else:
-        target = st.selectbox("Run", candidates, key="live_run")
-        rdir = RUNS / target
-        cur = config.load_raw(rdir / "config.toml")
-        for section, vals in live.read_overrides(rdir / "overrides.json").items():
-            cur.setdefault(section, {}).update(vals)
-        with st.form(f"live-{target}"):
-            param_inputs(cur, True, f"l_{target}_")
-            apply = st.form_submit_button("Apply from next generation", type="primary")
-        if apply:
-            ov = {"env": {k: cur["env"][k] for k in live.ENV_KEYS if k in cur["env"]},
-                  "reward": {k: cur["reward"][k] for k in live.REWARD_KEYS if k in cur["reward"]},
-                  "neat": {k: cur["neat"][k] for k in live.NEAT_KEYS if k in cur["neat"]}}
-            live.write_json_atomic(rdir / "overrides.json", ov)
-            st.success("Saved. The trainer applies it when the current generation finishes.")
-        st.subheader("Changes applied so far")
-        ev = rdir / "events.jsonl"
-        if ev.exists():
-            rows = [json.loads(line) for line in ev.read_text().splitlines()]
-            st.dataframe(pd.DataFrame([{"generation": r["generation"], "changed": json.dumps(r["changed"])}
-                                       for r in rows]), hide_index=True)
-        else:
-            st.write("None yet.")
 
 with tab_replay:
     names = [n for n in run_names() if (RUNS / n / "best").exists()]

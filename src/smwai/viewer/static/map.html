@@ -100,12 +100,15 @@ async function load() {
     if (lv.error) throw new Error(lv.error);
     if (token !== loadToken) return;
     level = lv; redraw();
-    for (let i = 0; i < gens.length; i++) {
-      $('status').textContent = `loading paths ${i + 1}/${gens.length} (a run not recorded with a path is replayed once)...`;
-      const p = await (await fetch(`/api/path?run=${encodeURIComponent(run)}&gen=${gens[i].gen}`)).json();
+    const BATCH = 8;                          // fetch several generations at once, redraw once per batch
+    for (let i = 0; i < gens.length; i += BATCH) {
+      $('status').textContent = `loading paths ${Math.min(i + BATCH, gens.length)}/${gens.length}...`;
+      const got = await Promise.all(gens.slice(i, i + BATCH).map(g =>
+        fetch(`/api/path?run=${encodeURIComponent(run)}&gen=${g.gen}`).then(r => r.json())));
       if (token !== loadToken) return;
-      if (p.error) throw new Error(p.error);
-      paths.push(p); redraw();
+      const bad = got.find(p => p.error);
+      if (bad) throw new Error(bad.error);
+      paths.push(...got); redraw();
     }
     $('status').textContent = `${paths.length} runs`;
     await loadEvents(run, token);

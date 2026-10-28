@@ -29,6 +29,7 @@ class RewardConfig:
     clear_time_ref: float = 3000.0 # frames at which the clear-time bonus has shrunk to zero
     yoshi_coin_bonus: float = 0.0  # per big (Yoshi) coin
     block_bonus: float = 0.0       # per ? block hit (any block that turns into a used block)
+    goal_bar_bonus: float = 0.0    # per bonus star won at the goal bar: hitting the bar higher pays more
 
 
 @dataclass
@@ -163,6 +164,7 @@ class SmwEnv(gym.Env):
             reward -= rc.death_penalty
         if cleared:
             reward += rc.clear_bonus
+            reward += rc.goal_bar_bonus * self.state.bonus_stars
             reward += rc.clear_time_bonus * max(0.0, 1.0 - self.frames / rc.clear_time_ref)
         terminated = died or cleared
         truncated = self.stuck >= self.cfg.stuck_frames or self.frames >= self.cfg.max_frames

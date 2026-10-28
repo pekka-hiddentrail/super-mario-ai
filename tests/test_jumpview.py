@@ -83,3 +83,20 @@ def test_physics_mode_layout_and_size():
     names = [n for n, _ in input_layout(cfg)]
     assert names[:4] == ["solid", "enemy", "item", "coin"] and "x_speed" in names and "A10:land" in names
     assert n_inputs(cfg) == 169 * 4 + 3 + 3 + 30
+
+
+def test_explore_mode_has_a_pipe_channel_and_sees_pipe_tiles():
+    from smwai.env import EnvConfig, input_layout, n_inputs
+    cfg = EnvConfig(inputs="explore")
+    names = [n for n, _ in input_layout(cfg)]
+    assert names[:5] == ["solid", "enemy", "item", "coin", "pipe"] and "A10:land" in names
+    assert n_inputs(cfg) == 169 * 5 + 3 + 3 + 30
+    w = wram()
+    flat_level(w)
+    tx, ty = 108 // 16, 23                                            # the tile under Mario's centre, one row below his row
+    off = (tx // 16) * R.TILES_PER_PAGE + ty * 16 + tx % 16
+    w[R.MAP16_HIGH + off], w[R.MAP16_LOW + off] = 1, 0x37             # a pipe top piece (0x137)
+    st = state_at(w, 100, 24 * 16 - 32)
+    grid = R.pipe_grid(w, st, 6)
+    assert grid.sum() == 1 and grid[6 + (ty - 22), 6] == 1
+    assert R.solid_grid(w, st, 6)[6 + (ty - 22), 6] == 1              # pipes are still solid blocks

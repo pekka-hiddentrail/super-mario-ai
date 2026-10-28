@@ -42,6 +42,7 @@ POWERUP_SPRITES = {0x74, 0x75, 0x76, 0x77, 0x78}   # mushroom, flower, star, fea
 NEUTRAL_SPRITES = {0x35}   # Yoshi
 COIN_TILE = 0x2B           # Map16 low byte of a coin block (high byte 0)
 MAP16_LOW = 0xC800
+PIPE_TILES = range(0x34, 0x40)   # Map16 0x134-0x13F: the green pipe pieces (seen: 0x135-0x138 down pipe, 0x13B-0x13F sideways pipe)
 N_SPRITES = 12
 WRAM_OFFSET = 0x2800   # stable-retro get_ram(): 8K low mirror + 2K SRAM, then 128K WRAM
 
@@ -189,6 +190,19 @@ def coin_grid(ram, state, view=6):
             continue
         off = (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
         if MAP16_HIGH + off < len(ram) and ram[MAP16_LOW + off] == COIN_TILE and ram[MAP16_HIGH + off] == 0:
+            grid[row, col] = 1
+    return grid
+
+
+def pipe_grid(ram, state, view=6):
+    """Window grid centred on Mario: 1 on the pieces of a green pipe (so the network can tell pipes from ordinary ground)."""
+    grid = np.zeros(grid_shape(view), dtype=np.int8)
+    for row, col, wx, wy in _cells(state, view):
+        tx, ty = (wx + 8) // 16, wy // 16
+        if wx < 0 or wy < 0 or ty >= 27:
+            continue
+        off = (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
+        if MAP16_HIGH + off < len(ram) and ram[MAP16_HIGH + off] == 1 and ram[MAP16_LOW + off] in PIPE_TILES:
             grid[row, col] = 1
     return grid
 

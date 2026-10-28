@@ -41,7 +41,7 @@ class EnvConfig:
     frame_skip: int = 4
     radius: int = 6                # view: this many tiles every way around Mario ...
     window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
-    inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options
+    inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options | explore: + pipes
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -55,6 +55,10 @@ def view(cfg):
 def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
     scalars = [("in_water", "scalar"), ("on_yoshi", "scalar"), ("powerup", "scalar")]
+    if cfg.inputs == "explore":     # physics + a pipe channel: pipes can be told apart from ground, and entering one can be rewarded
+        motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
+        return ([("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid"), ("pipe", "grid")] + scalars
+                + motion + [(name, "scalar") for name in jumpview.names()])
     if cfg.inputs == "physics":     # collect + Mario's speeds + what each standard jump would do (jumpview.py)
         motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
         return ([("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid")] + scalars + motion
@@ -74,14 +78,16 @@ def n_inputs(cfg):
 
 def build_observation(ram, state, cfg):
     """Flat int8 vector in input_layout order."""
-    if cfg.inputs in ("channels", "collect", "physics"):
-        collect = cfg.inputs in ("collect", "physics")
+    if cfg.inputs in ("channels", "collect", "physics", "explore"):
+        collect = cfg.inputs in ("collect", "physics", "explore")
         enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect)
         parts = [R.solid_grid(ram, state, view(cfg)).ravel(), enemy.ravel(), item.ravel()]
         if collect:
             parts.append(R.coin_grid(ram, state, view(cfg)).ravel())
+        if cfg.inputs == "explore":
+            parts.append(R.pipe_grid(ram, state, view(cfg)).ravel())
         parts.append(np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8))
-        if cfg.inputs == "physics":
+        if cfg.inputs in ("physics", "explore"):
             parts.append(np.array(jumpview.motion_scalars(state), dtype=np.int8))
             parts.append(jumpview.features(ram, state))
         return np.concatenate(parts).astype(np.int8)

@@ -90,6 +90,10 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   higher than the takeoff. Yoshi's Island 4: 2793 vs 2609 (physics reached the plateau on 3 of 3 seeds, baseline on 2 of 3).
   On Yoshi's Island 4 the plateau (x ~2793) is caused by the way on being a **sideways pipe** at x ~2723, which the runs jump over.
   Pipes can be mandatory path elements, not only bonuses.
+- **Pipe reward without perception does not work**: on Yoshi's Island 2 (baseline vs `pipe_bonus` 100000 + climb bonus, 3 seeds, 15
+  generations) all 6 runs cleared the level but none of the 90 recorded best runs entered the pipe at x 3878; with only solid-block
+  inputs a pipe looks like any other block. The `explore` input mode adds a pipe channel (Map16 0x134-0x13F) on top of `physics`;
+  its test (`configs/experiments/explore_pipes.toml`) is queued behind the Yoshi's Island 4 pipe test.
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits

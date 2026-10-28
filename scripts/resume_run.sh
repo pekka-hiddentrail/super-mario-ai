@@ -5,6 +5,6 @@
 . ~/venv/bin/activate
 cd "$(dirname "$0")/.."
 run=$(ls -d $1 | tail -1)
-ckpt=$(ls "$run"/ckpt-* | sort -t- -k2 -n | tail -1)
+ckpt=$(ls -v "$run"/ckpt-* | tail -1)
 echo "resuming $ckpt for $3 more generations"
 exec python -W ignore -m smwai.cli train --config "$2" --resume "$ckpt" --generations "$3" --workers "$4"

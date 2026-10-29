@@ -134,14 +134,16 @@ The saved state `states/manual_*.state` is raw (not loadable as a retro state); 
 - PPO sees one frame only (no speed, no memory).
 
 ## Next (in order)
-1. Repeat the long adaptive run on Yoshi's Island 1 with more seeds (the single clear could be luck), then add speed and collect rewards on top.
-2. More seeds for adaptive mutation (5+), tune `stall_generations` and the boost size; try it together with the wider view (mixed results so far).
-3. Speed and ground inputs (X/Y speed, in-air flag) in one observation version (see "Making the agent more intelligent", item 1).
-4. Try the box-hit and big-coin rewards (`collect` configs) and check that the path map shows them being collected.
-5. (done: shifted window did not help, see Findings) Input window variants.
-6. Multi-level sequences (advance to the next save state on clear).
-7. PPO: resume, frame stacking, stable evaluation.
-8. Real graphics for the level map from the sprite sheets (location of the sprite sheet downloads still to be decided).
+1. **Is the Yoshi's Island 3 high route repeatable?** `ride` + climb bonus passed the old wall on 1 of 3 seeds. Run 6-8 seeds and more generations, look at the
+   videos, and see whether the bridge and the swinging block are actually used.
+2. **One benchmark of the best setup on all four levels** (Yoshi's Island 1-4): explore/ride inputs, adaptive mutation, pipe bonus 3000, per-room progress,
+   climb bonus, 5 seeds each; clear rate, generations and frames to clear. This replaces the scattered small experiments.
+3. **Reward the quality of a clear** (goal bar, speed, fast clear, coins): built, never used in a real training run yet.
+4. **Multi-level sequences** (advance to the next level on clear; every attempt starts at a level's start).
+5. Downward pipes (need a DOWN press) are rarely found; try a milder way to make them discoverable. Decide on the water penalty.
+6. PPO: resume, frame stacking, stable evaluation; pre-training from NEAT runs.
+7. Real graphics for the level map from the sprite sheets.
+8. Longer term: see "Making the agent more intelligent" (context router, exploration reward, memory).
 
 ## Level map and path view
 Done (see above). Possible additions: compare two runs on one map, heat map of deaths over many runs, real graphics.

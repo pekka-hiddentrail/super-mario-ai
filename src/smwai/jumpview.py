@@ -31,7 +31,7 @@ def _clip(v, lo, hi):
     return int(max(lo, min(hi, round(v))))
 
 
-def _option(ram, state, vy0, hold, enemies):
+def _option(ram, state, vy0, hold, enemies, blocks=()):
     cx0, feet0 = state.x + 8, state.y + FEET
     coins, hit = set(), 0
     for p in physics.trajectory_from(state.x_speed, vy0, hold, 100):
@@ -43,19 +43,20 @@ def _option(ram, state, vy0, hold, enemies):
                 hit = 1
         if R.coin_at(ram, cx, feet - 16):
             coins.add((int(cx) // 16, int(feet - 16) // 16))
-        if p.vy > 0 and R.solid_at(ram, cx, feet):
+        if p.vy > 0 and (R.solid_at(ram, cx, feet) or R.on_platform(blocks, cx, feet)):
             return [1, hit, min(len(coins), 3), _clip((cx - cx0) / 16, -15, 15), _clip((feet - feet0) / 16, -8, 8)]
     return [-1, hit, min(len(coins), 3), 0, 0]
 
 
-def features(ram, state):
-    """The 30 jump-option values, in the order of names()."""
-    enemies = [(s.x, s.y) for s in state.sprites if s.kind == "enemy"]
+def features(ram, state, ride=False):
+    """The 30 jump-option values, in the order of names(). ride=True: moving platforms are ground, not enemies."""
+    enemies = [(s.x, s.y) for s in state.sprites if s.kind == "enemy" and not (ride and s.number in R.PLATFORM_SPRITES)]
+    blocks = R.platform_blocks(state) if ride else ()
     out = []
     for button in BUTTONS_MODELLED:
         for hold in HOLDS:
             vy0 = state.y_speed if state.in_air else physics.takeoff_for(button, state.x_speed)
-            out += _option(ram, state, vy0, hold, enemies)
+            out += _option(ram, state, vy0, hold, enemies, blocks)
     return np.array(out, dtype=np.int8)
 
 

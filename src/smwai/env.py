@@ -57,6 +57,10 @@ def view(cfg):
 def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
     scalars = [("in_water", "scalar"), ("on_yoshi", "scalar"), ("powerup", "scalar")]
+    if cfg.inputs == "ride":        # explore + a platform channel: moving platforms are ground (and not enemies) for the network and the jump model
+        motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
+        return ([("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid"), ("pipe", "grid"), ("platform", "grid")]
+                + scalars + motion + [(name, "scalar") for name in jumpview.names()])
     if cfg.inputs == "explore":     # physics + a pipe channel: pipes can be told apart from ground, and entering one can be rewarded
         motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
         return ([("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid"), ("pipe", "grid")] + scalars
@@ -80,18 +84,20 @@ def n_inputs(cfg):
 
 def build_observation(ram, state, cfg):
     """Flat int8 vector in input_layout order."""
-    if cfg.inputs in ("channels", "collect", "physics", "explore"):
-        collect = cfg.inputs in ("collect", "physics", "explore")
-        enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect)
+    if cfg.inputs in ("channels", "collect", "physics", "explore", "ride"):
+        collect = cfg.inputs in ("collect", "physics", "explore", "ride")
+        enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect, skip_platforms=cfg.inputs == "ride")
         parts = [R.solid_grid(ram, state, view(cfg)).ravel(), enemy.ravel(), item.ravel()]
         if collect:
             parts.append(R.coin_grid(ram, state, view(cfg)).ravel())
-        if cfg.inputs == "explore":
+        if cfg.inputs in ("explore", "ride"):
             parts.append(R.pipe_grid(ram, state, view(cfg)).ravel())
+        if cfg.inputs == "ride":
+            parts.append(R.platform_grid(state, view(cfg)).ravel())
         parts.append(np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8))
-        if cfg.inputs in ("physics", "explore"):
+        if cfg.inputs in ("physics", "explore", "ride"):
             parts.append(np.array(jumpview.motion_scalars(state), dtype=np.int8))
-            parts.append(jumpview.features(ram, state))
+            parts.append(jumpview.features(ram, state, ride=cfg.inputs == "ride"))
         return np.concatenate(parts).astype(np.int8)
     return R.tile_grid(ram, state, view(cfg)).ravel()
 

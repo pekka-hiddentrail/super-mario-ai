@@ -1,0 +1,42 @@
+# Yoshi Island 3: the route needs a swinging block (sprite 0x5F) and a turn-block bridge (sprite 0x5A, five solid blocks that pull
+# in and push out). In every earlier input mode these were 'enemies' and not ground. `ride` adds a platform channel and lets the jump
+# model land on them. Baseline = explore (pipe channel, no platforms); `ride-climb` also pays 1 per pixel of new standing height.
+# Run: smwai experiment --spec configs/experiments/ride_yi3.toml
+name = "ride-yi3"
+base = "configs/yi3.toml"
+seeds = [1, 2, 3]
+generations = 15
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "explore"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "explore"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "ride"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "ride-climb"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

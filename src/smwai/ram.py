@@ -40,6 +40,9 @@ MAP16_HIGH = 0x1C800
 TILES_PER_PAGE = 0x1B0     # 16 columns x 27 rows per horizontal-level page
 POWERUP_SPRITES = {0x74, 0x75, 0x76, 0x77, 0x78}   # mushroom, flower, star, feather, 1-up
 NEUTRAL_SPRITES = {0x35}   # Yoshi
+BRIDGE_SPRITE = 0x5A       # turn-block bridge: 5 solid blocks that pull in to one and push out again (value at $151C: 0..32)
+SWING_SPRITE = 0x5F        # chain-hung block that carries Mario (sprite position = the block; geometry only roughly checked)
+PLATFORM_SPRITES = {BRIDGE_SPRITE, SWING_SPRITE}
 COIN_TILE = 0x2B           # Map16 low byte of a coin block (high byte 0)
 MAP16_LOW = 0xC800
 PIPE_TILES = range(0x34, 0x40)   # Map16 0x134-0x13F: the green pipe pieces (seen: 0x135-0x138 down pipe, 0x13B-0x13F sideways pipe)
@@ -68,6 +71,8 @@ class Sprite:
     number: int
     is_item: bool
     kind: str = "enemy"     # enemy | item | neutral (e.g. Yoshi) | other (extended sprites)
+    slot: int = -1
+    ext: int = 0            # turn-block bridge: how far the blocks have moved out from the middle one (pixels)
 
 
 @dataclass
@@ -106,7 +111,8 @@ def read_sprites(ram):
             x=u8(ram, SPRITE_X_LO + slot) | u8(ram, SPRITE_X_HI + slot) << 8,
             y=u8(ram, SPRITE_Y_LO + slot) | u8(ram, SPRITE_Y_HI + slot) << 8,
             number=number, is_item=number in POWERUP_SPRITES,
-            kind="item" if number in POWERUP_SPRITES else "neutral" if number in NEUTRAL_SPRITES else "enemy"))
+            kind="item" if number in POWERUP_SPRITES else "neutral" if number in NEUTRAL_SPRITES else "enemy",
+            slot=slot, ext=u8(ram, 0x151C + slot) if number == BRIDGE_SPRITE else 0))
     for slot in range(N_SPRITES):
         if u8(ram, EXT_NUMBER + slot) == 0:
             continue
@@ -207,7 +213,7 @@ def pipe_grid(ram, state, view=6):
     return grid
 
 
-def sprite_grids(state, view=6, legacy=True):
+def sprite_grids(state, view=6, legacy=True, skip_platforms=False):
     """(enemy, item) window grids with 1 where such a sprite is.
 
     legacy=True keeps the original behaviour (every non-item sprite, extended ones included, is an
@@ -221,6 +227,8 @@ def sprite_grids(state, view=6, legacy=True):
         col = round((sp.x - state.x) / 16) + left
         row = round((sp.y - state.y) / 16) + up
         if not (0 <= row < rows and 0 <= col < cols):
+            continue
+        if skip_platforms and sp.number in PLATFORM_SPRITES:
             continue
         if legacy:
             (item if sp.is_item else enemy)[row, col] = 1
@@ -264,3 +272,34 @@ def room_signature(ram):
     taking coins do not change it, so coming back to a room gives the same value."""
     n = u8(ram, 0x5D) * TILES_PER_PAGE
     return (u8(ram, 0x5D), int(np.count_nonzero(ram[MAP16_HIGH:MAP16_HIGH + n] == 1)))
+
+
+def platform_blocks(state):
+    """Solid 16x16 blocks (world x, y of the top-left corner) that belong to moving platforms right now.
+    Bridge: the middle block plus one pair at +-ext/2 and one pair at +-ext. Swing: one block at the sprite position."""
+    blocks = []
+    for sp in state.sprites:
+        if sp.number == BRIDGE_SPRITE:
+            for off in {0, sp.ext // 2, -(sp.ext // 2), sp.ext, -sp.ext}:
+                blocks.append((sp.x + off, sp.y))
+        elif sp.number == SWING_SPRITE:
+            blocks.append((sp.x, sp.y))
+    return blocks
+
+
+def platform_grid(state, view=6):
+    """Window grid centred on Mario: 1 where a moving-platform block is."""
+    left, right, up, down = window(view)
+    rows, cols = grid_shape(view)
+    grid = np.zeros((rows, cols), dtype=np.int8)
+    for bx, by in platform_blocks(state):
+        col = round((bx - state.x) / 16) + left
+        row = round((by - state.y) / 16) + up
+        if 0 <= row < rows and 0 <= col < cols:
+            grid[row, col] = 1
+    return grid
+
+
+def on_platform(blocks, px, py):
+    """Is the world point (px, py) inside one of the platform blocks?"""
+    return any(bx <= px < bx + 16 and by <= py < by + 16 for bx, by in blocks)

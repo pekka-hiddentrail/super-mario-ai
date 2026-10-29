@@ -99,12 +99,13 @@ def param_inputs(raw, prefix):
             raw["neat"]["pop_size"] = st.number_input("Population", 10, 2000, int(raw["neat"]["pop_size"]),
                                                       key=prefix + "pop")
         if True:
-            modes = ["mixed", "channels", "collect", "physics", "explore"]
+            modes = ["mixed", "channels", "collect", "physics", "explore", "ride"]
             raw["env"]["inputs"] = st.selectbox("Network inputs", modes, key=prefix + "inputs",
                                                 index=modes.index(raw["env"].get("inputs", "mixed")),
                                                 help="mixed: one tile grid. channels: solid / enemy / item grids plus water, "
                                                      "Yoshi, power-up. collect: + coins. physics: + speeds and what each "
-                                                     "standard jump would do. explore: + a pipe grid (recommended).")
+                                                     "standard jump would do. explore: + a pipe grid. ride: + a moving-platform grid "
+                                                     "(bridges, swinging blocks count as ground, not enemies).")
             raw["env"]["room_progress"] = st.checkbox(
                 "Progress per room (pipes and bonus rooms)", value=bool(raw["env"].get("room_progress", False)),
                 key=prefix + "rooms", help="Each room keeps its own furthest x, so a bonus room is not a dead end.")

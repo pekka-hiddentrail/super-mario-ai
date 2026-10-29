@@ -100,3 +100,39 @@ def test_explore_mode_has_a_pipe_channel_and_sees_pipe_tiles():
     grid = R.pipe_grid(w, st, 6)
     assert grid.sum() == 1 and grid[6 + (ty - 22), 6] == 1
     assert R.solid_grid(w, st, 6)[6 + (ty - 22), 6] == 1              # pipes are still solid blocks
+
+
+def _put_sprite(w, slot, number, x, y, ext=0):
+    w[R.SPRITE_STATUS + slot] = 8
+    w[R.SPRITE_NUMBER + slot] = number
+    w[R.SPRITE_X_LO + slot], w[R.SPRITE_X_HI + slot] = x & 0xFF, x >> 8
+    w[R.SPRITE_Y_LO + slot], w[R.SPRITE_Y_HI + slot] = y & 0xFF, y >> 8
+    w[0x151C + slot] = ext
+
+
+def test_turn_block_bridge_blocks_follow_its_extension():
+    w = wram()
+    _put_sprite(w, 0, R.BRIDGE_SPRITE, 704, 208, ext=0)
+    st = state_at(w, 645, 224)
+    assert sorted(R.platform_blocks(st)) == [(704, 208)]                      # pulled in: one block
+    _put_sprite(w, 0, R.BRIDGE_SPRITE, 704, 208, ext=32)
+    st = state_at(w, 645, 224)
+    assert sorted(R.platform_blocks(st)) == [(672, 208), (688, 208), (704, 208), (720, 208), (736, 208)]   # five blocks, 80 px
+
+
+def test_ride_mode_hides_platforms_from_enemies_and_lands_on_them():
+    from smwai.env import EnvConfig, input_layout, n_inputs
+    cfg = EnvConfig(inputs="ride")
+    names = [n for n, _ in input_layout(cfg)]
+    assert names[:6] == ["solid", "enemy", "item", "coin", "pipe", "platform"]
+    assert n_inputs(cfg) == 169 * 6 + 3 + 3 + 30
+    w = wram()                                                                # no ground at all: a pit, except the bridge
+    w[0x5D] = 4
+    _put_sprite(w, 0, R.BRIDGE_SPRITE, 160, 24 * 16 - 16, ext=32)             # bridge 16 px above the (absent) floor line
+    st = state_at(w, 100, 24 * 16 - 64, x_speed=36)                           # running, feet 2 tiles above the bridge top
+    enemy, _ = R.sprite_grids(st, 6, legacy=False, skip_platforms=True)
+    assert enemy.sum() == 0 and R.platform_grid(st, 6).sum() == 5
+    plain = jumpview.features(w, st, ride=False).reshape(6, 5)
+    ride = jumpview.features(w, st, ride=True).reshape(6, 5)
+    assert plain[1][0] == -1                                                  # without the platform: a pit
+    assert ride[1][0] == 1 and ride[1][1] == 0                                # with it: lands, and the bridge is no enemy

@@ -191,7 +191,7 @@ function drawNet(s) {
   }
   groups.forEach(grp => {
     if (grp.kind === 'grid') {
-      const cs = grp.cell, fillFor = { enemy: '--enemy', item: '--item', coin: '--coin', pipe: '--pos' }[grp.name] || '--solid';
+      const cs = grp.cell, fillFor = { enemy: '--enemy', item: '--item', coin: '--coin', pipe: '--pos', platform: '--box' }[grp.name] || '--solid';
       c.fillStyle = css('--muted'); c.font = '11px system-ui';
       if (groups.length > 1) c.fillText(grp.name, grp.x0, grp.y0 - 4);
       for (let i = 0; i < rows * cols; i++) {

@@ -112,14 +112,14 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   x 3876 (best fitness 104,318), seed 1 does not. Videos: `exp-rooms-pipes-yi2-rooms-s2` (gen 8) and `exp-rooms-pipes-yi4-rooms-s1` (gen 6).
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
-## Yoshi's Island 3: what is known (not solved)
-- Every run of every variant stalls at x ~540-550 (12 of 12). Terrain: a short ground stretch, then two gaps (5 and 8 tiles) and a solid wall
-  10 tiles tall at x 528-640 whose top (tile row 16) is 8 tiles above the ground; the tiles inside such structures are scenery, Mario walks through them.
-- Frames at the stall show Mario falling through an open chasm whose floor is drawn as dotted outline blocks (probably switch-palace outline blocks,
-  not solid without the switch) and a ledge on the far side that is higher than his takeoff. A moving sprite (`0x5F`, a chain-hung block) swings over
-  the chasm; it is currently classed as an "enemy", so the network treats it as something to avoid. Whether it carries Mario across is not verified.
-- A two-stage search from saved states (scripts/probe_platform.py) found no safe landing at all, so the intended route is still unknown.
-  Playing the section by hand (`scripts/play_manual.ps1 --state YoshiIsland3`) is the quickest way to find it.
+## Yoshi's Island 3: what is known
+Route (from the user playing it by hand): jump up to the platforms; jump over the floating platform, which starts to swing to the right once
+you stand on it, and jump off before it swings too low; then a row of five blocks that pull in to one block and push out again (a **turn-block
+bridge**, sprite `0x5A`): solid, but they can move from under you. Memory facts: the bridge's extension is table `$151C` (0 = one block, 32 = five
+blocks, x from anchor-32 to anchor+32+16, y = anchor y), cycling every ~100 frames; the swinging block is sprite `0x5F` (position = the block).
+Before the `ride` input mode both counted as enemies and neither as ground, and all 12 earlier runs stalled at x ~549.
+`ride` (explore + a platform channel + landing on platforms in the jump model) is tested in `configs/experiments/ride_yi3.toml`.
+The saved state `states/manual_*.state` is raw (not loadable as a retro state); it is for analysis only, training always starts at the level start.
 
 ## Known limits
 - **Dead ends** (observed by the user): on Yoshi's Island 4, running past the sideways pipe entrance at x ~2723 leaves Mario stuck in the tunnel

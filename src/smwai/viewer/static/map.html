@@ -7,11 +7,11 @@
 <style>
   :root {
     --bg: #14161a; --panel: #1d2026; --text: #e6e8ec; --muted: #8b93a1; --line: #2c313a;
-    --accent: #5aa9ff; --best: #f2994a; --coin: #f2cc60; --box: #e8833a; --item: #bc8cff; --solid: #5b6573; --deco: #2f3640; --sky: #181b20; --bad: #f85149;
+    --accent: #5aa9ff; --best: #f2994a; --coin: #f2cc60; --box: #e8833a; --pipe: #3fb950; --item: #bc8cff; --solid: #5b6573; --deco: #2f3640; --sky: #181b20; --bad: #f85149;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg: #f4f5f7; --panel: #fff; --text: #1b1f24; --muted: #5b6573; --line: #d5d9e0;
-            --accent: #0b4fa8; --best: #c2410c; --coin: #b08800; --box: #c2410c; --item: #8250df; --solid: #6b7280; --deco: #d9dde4; --sky: #eef1f5; --bad: #cf222e; }
+            --accent: #0b4fa8; --best: #c2410c; --coin: #b08800; --box: #c2410c; --pipe: #1a7f37; --item: #8250df; --solid: #6b7280; --deco: #d9dde4; --sky: #eef1f5; --bad: #cf222e; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
@@ -57,6 +57,7 @@
     <span><i class="sw" style="background:var(--solid)"></i>solid tile</span>
     <span><i class="sw" style="background:var(--coin)"></i>coin (dot) / big coin (outlined block)</span>
     <span><i class="sw" style="background:var(--box)"></i>box with something in it</span>
+    <span><i class="sw" style="background:var(--pipe)"></i>pipe</span>
     <span>on the best run: dot = coin picked up, ring = big coin, triangle = power-up, diamond = box hit, blue square = pipe, blue dot = climbed higher</span>
     <span><i class="sw" style="background:var(--deco)"></i>other tile (blocks, decoration)</span>
     <span><i class="sw" style="background:var(--accent)"></i>run path - darker = higher fitness, lighter = lower</span>
@@ -127,6 +128,9 @@ function redraw() {
         ctx.fillStyle = css('--coin'); ctx.beginPath(); ctx.arc((x + 0.5) * t, (y + 0.5) * t, Math.max(1.5, t * 0.3), 0, 7); ctx.fill();
       } else if (c === 'Y') {                            // big coin: full gold block with outline
         ctx.fillStyle = css('--coin'); ctx.fillRect(x * t, y * t, t, t);
+        ctx.strokeStyle = css('--text'); ctx.lineWidth = 1; ctx.strokeRect(x * t + 0.5, y * t + 0.5, t - 1, t - 1);
+      } else if (c === 'P') {                            // green pipe
+        ctx.fillStyle = css('--pipe'); ctx.fillRect(x * t, y * t, t, t);
         ctx.strokeStyle = css('--text'); ctx.lineWidth = 1; ctx.strokeRect(x * t + 0.5, y * t + 0.5, t - 1, t - 1);
       } else if (c === '?') {                            // box with something in it
         ctx.fillStyle = css('--box'); ctx.fillRect(x * t, y * t, t, t);

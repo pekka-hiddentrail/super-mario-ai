@@ -4,11 +4,12 @@ import json
 from pathlib import Path
 
 rows = {}
+import re
 for run in sorted(glob.glob("runs/exp-rooms-pipes*-*-rooms-s*")):
     recs = [json.loads(f.read_text()) for f in sorted(Path(run, "best").glob("gen_*.json"))]
     if not recs:
         continue
-    level = "yi2" if "-yi2-" in run else "yi4"
+    level = ("yi2" if "-yi2-" in run else "yi4") + " [" + re.sub(r"-yi[24]-rooms-s\d+$", "", Path(run).name) + "]"   # per experiment (bonus size differs)
     took_pipe = any(e[1] == "pipe" for r in recs for e in r.get("events", []))
     cleared = any(r["cleared"] for r in recs)
     both = any(r["cleared"] and any(e[1] == "pipe" for e in r.get("events", [])) for r in recs)

@@ -31,6 +31,7 @@ class RewardConfig:
     yoshi_coin_bonus: float = 0.0  # per big (Yoshi) coin
     block_bonus: float = 0.0       # per ? block hit (any block that turns into a used block)
     goal_bar_bonus: float = 0.0    # per bonus star won at the goal bar: hitting the bar higher pays more
+    water_penalty: float = 0.0     # per emulator frame spent in water (off: it is not clear yet that avoiding water is right)
     height_bonus: float = 0.0      # per pixel of new standing height: landing on something higher than ever before
     pipe_bonus: float = 0.0         # per pipe entered, down or sideways (each pipe pays once per episode)
 
@@ -170,6 +171,8 @@ class SmwEnv(gym.Env):
         self._track_room(prev)
         rc = self.cfg.reward
         reward = -rc.time_penalty * self.cfg.frame_skip
+        if self.state.in_water:
+            reward -= rc.water_penalty * self.cfg.frame_skip
         if self.state.x > self.max_x:
             reward += rc.progress * (self.state.x - self.max_x)
             self.max_x = self.state.x

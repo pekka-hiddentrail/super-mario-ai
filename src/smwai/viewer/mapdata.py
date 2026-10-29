@@ -11,6 +11,8 @@ YOSHI_COIN_TILES = {0x2D, 0x2E}  # the two halves of a big coin
 
 def _tile_char(low, high):
     if high == 1:
+        if low in R.PIPE_TILES:
+            return "P"                                # green pipe piece (Map16 0x134-0x13F)
         return "?" if low in BOX_TILES else "#"      # box with something in it / solid ground and blocks
     if high == 0 and low == 0x25:
         return "."        # empty sky
@@ -26,7 +28,7 @@ def level_map(run_dir):
     run_dir = Path(run_dir)
     cfg = config.load(run_dir / "config.toml")
     level = cfg.env.levels[0]
-    cache = run_dir.parent / "_levels" / f"{level}.v3.json"     # v3: big coins and boxes marked
+    cache = run_dir.parent / "_levels" / f"{level}.v4.json"     # v4: pipes marked
     if cache.exists():
         return cache.read_text()
     train.use_config(cfg.env)

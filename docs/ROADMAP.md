@@ -135,6 +135,12 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 ## Level map and path view
 Done (see above). Possible additions: compare two runs on one map, heat map of deaths over many runs, real graphics.
 
+## Decisions from the user
+- Pipes should be seen as pipes (pipe channel in the `explore` input mode; pipes drawn green on the path map). A pipe is not always the
+  only way through a level, so the pipe bonus should be a few thousand (3000), not 100000. Test: `configs/experiments/rooms_pipes_3k.toml`.
+- Water levels: avoiding water probably makes sense, but that is not decided. An optional `water_penalty` (per frame in water, off by
+  default) exists; the water flag is already a network input.
+
 ## Learning ideas (experiment ladder)
 Status: runner built; ladders run on Yoshi's Island 3 (nothing helped) and Yoshi's Island 1 (adaptive mutation helped; see Findings).
 - Reward: time penalty (done, modest effect), speed bonus and fast-clear bonus (built, not yet in a ladder run).

@@ -187,6 +187,25 @@ def collect(vec, net, critic, obs, cfg):
     return (flat(arrays["obs"]), flat(arrays["act"]), flat(arrays["logp"]), flat(adv), flat(ret)), obs
 
 
+class RefineSchedule:
+    """When is PPO used? On a fixed schedule, or only while NEAT's best fitness has stopped improving (a hard spot such as a gap)."""
+
+    def __init__(self, cfg):
+        self.cfg, self.reference, self.stall = cfg, -np.inf, 0
+
+    def due(self, generation, best_fitness):
+        cfg = self.cfg
+        if best_fitness > self.reference + cfg["min_improvement"]:
+            self.reference, self.stall = best_fitness, 0
+        else:
+            self.stall += 1
+        if generation < cfg["start_generation"]:
+            return False
+        if cfg["trigger"] == "stall":
+            return self.stall >= cfg["stall_generations"]
+        return (generation - cfg["start_generation"]) % cfg["every"] == 0
+
+
 class HybridEvaluator(PoolEvaluator):
     """NEAT evaluation, then PPO refinement of the best genomes, written back when it helps."""
 
@@ -200,12 +219,13 @@ class HybridEvaluator(PoolEvaluator):
         self.critic = Critic(self.vec.observation_space.shape[0])
         self.opt_v = torch.optim.Adam(self.critic.parameters(), lr=cfg["critic_lr"])
         self.generation = -1
+        self.schedule = RefineSchedule(cfg)
 
     def evaluate(self, genomes, config):
         super().evaluate(genomes, config)
         self.generation += 1
         cfg = self.cfg
-        if self.generation < cfg["start_generation"] or (self.generation - cfg["start_generation"]) % cfg["every"]:
+        if not self.schedule.due(self.generation, max(g.fitness for _, g in genomes)):
             return
         elites = sorted(genomes, key=lambda gg: gg[1].fitness, reverse=True)[: cfg["elites"]]
         report, t0 = [], time.time()

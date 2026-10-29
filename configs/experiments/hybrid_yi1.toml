@@ -34,3 +34,21 @@ every = 2
 n_envs = 8
 steps = 128
 iters = 3
+
+[[variant]]
+name = "neat-ppo-stall"       # PPO only while NEAT's best has not gained 20 for 2 generations
+[variant.env]
+inputs = "explore"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+[variant.hybrid]
+enabled = true
+trigger = "stall"
+stall_generations = 2
+elites = 2
+start_generation = 3
+n_envs = 8
+steps = 128
+iters = 3

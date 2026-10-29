@@ -158,6 +158,14 @@ Done (see above). Possible additions: compare two runs on one map, heat map of d
 A bonus of 3000 gets the sideways pipe on Yoshi's Island 4 found just as often as 100000 (it is on the way) and does not trap runs in the
 bonus room; the downward pipe on Yoshi's Island 2 stays hard to find (needs a deliberate DOWN press). Small samples.
 
+## NEAT + PPO as one learner (hybrid.py, `[hybrid]` in a config)
+Each generation NEAT evaluates the population; the best `elites` genomes are turned into a PyTorch policy of the same structure, refined
+with PPO (fresh play on several emulators, gradient steps on the genome's weights and biases) and written back if they play better
+(Lamarckian inheritance); NEAT then breeds from them. Triggers: `schedule` (every N generations) or `stall` (only while NEAT's best has stopped
+improving, i.e. at a hard spot). User's view: the first levels are run-right-and-jump, so NEAT alone is enough there; the more complex the
+level, the more the combination makes sense (NEAT crosses the gap, PPO makes it cross better). Test: `configs/experiments/hybrid_yi1.toml`
+(neat-only vs neat-ppo vs neat-ppo-stall on Yoshi's Island 1); next on harder levels (Yoshi's Island 4 and 3). A tiny smoke run showed no gain yet.
+
 ## Decisions from the user
 - Pipes should be seen as pipes (pipe channel in the `explore` input mode; pipes drawn green on the path map). A pipe is not always the
   only way through a level, so the pipe bonus should be a few thousand (3000), not 100000. Test: `configs/experiments/rooms_pipes_3k.toml`.

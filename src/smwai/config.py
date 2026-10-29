@@ -88,7 +88,10 @@ HYBRID_DEFAULTS = dict(
     enabled=False,          # NEAT + PPO as one learner: PPO refines the best genomes of each generation (hybrid.py)
     elites=2,               # how many of the best genomes are refined per generation
     start_generation=2,     # first generation with refinement (NEAT alone finds a first working behaviour)
-    every=1,                # refine every N generations
+    every=1,                # refine every N generations (trigger = schedule)
+    trigger="schedule",     # "schedule": every N generations; "stall": only while NEAT's best has stopped improving
+    stall_generations=3,    # (trigger = stall) generations without a real gain before PPO is used
+    min_improvement=20.0,   # (trigger = stall) what counts as a real gain in fitness
     n_envs=8,               # parallel emulators for the PPO rollouts
     steps=128,              # steps per emulator per PPO iteration
     iters=3,                # PPO iterations per refined genome (iters * steps * n_envs steps of fresh experience)

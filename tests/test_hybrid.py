@@ -80,3 +80,14 @@ def test_ppo_update_raises_the_probability_of_the_rewarded_button(tmp_path):
         adv = reward - reward.mean()
         ppo_update(net, critic, opt_pi, opt_v, (obs, act, logp, adv, reward), cfg, eps)
     assert net.probs(obs, eps)[:, 0].mean().item() > before + 0.02
+
+
+def test_refine_schedule_every_n_and_on_stall():
+    from smwai.hybrid import RefineSchedule
+    every = RefineSchedule({**config.HYBRID_DEFAULTS, "start_generation": 2, "every": 2})
+    assert [every.due(g, 100.0 + g * 50) for g in range(7)] == [False, False, True, False, True, False, True]
+
+    stall = RefineSchedule({**config.HYBRID_DEFAULTS, "trigger": "stall", "stall_generations": 2, "start_generation": 1,
+                            "min_improvement": 20.0})
+    bests = [100, 200, 205, 207, 210, 400, 401]            # real gains at 0, 1 and 5; small creeping in between
+    assert [stall.due(g, b) for g, b in enumerate(bests)] == [False, False, False, True, True, False, False]

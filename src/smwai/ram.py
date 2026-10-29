@@ -92,6 +92,7 @@ class MarioState:
     x_speed: int = 0            # signed, 1/16 pixel per frame (positive = right)
     y_speed: int = 0            # signed, 1/16 pixel per frame (positive = down)
     in_air: bool = False
+    ducking: bool = False       # crouching or sliding (down held on the ground)
     pipe_timer: int = 0
     pipe_action: int = 0
     rooms: int = 0
@@ -144,7 +145,7 @@ def read_state(ram):
         yoshi_coins=u8(ram, YOSHI_COINS), bonus_stars=u8(ram, BONUS_STARS), used_blocks=used_block_count(ram),
         x_speed=u8(ram, PLAYER_X_SPEED) - 256 if u8(ram, PLAYER_X_SPEED) > 127 else u8(ram, PLAYER_X_SPEED),
         y_speed=u8(ram, PLAYER_Y_SPEED) - 256 if u8(ram, PLAYER_Y_SPEED) > 127 else u8(ram, PLAYER_Y_SPEED),
-        in_air=u8(ram, IN_AIR) != 0,
+        in_air=u8(ram, IN_AIR) != 0, ducking=u8(ram, 0x73) != 0,
         pipe_timer=u8(ram, PIPE_TIMER), pipe_action=u8(ram, PIPE_ACTION), rooms=u8(ram, ROOMS),
         sprites=read_sprites(ram))
 

@@ -99,3 +99,16 @@ def test_pipe_trip_does_not_count_as_being_stuck():
             break
     assert pipe_step is not None
     assert last_step > pipe_step + 45          # alive well beyond the 30 steps the old cut-off allowed
+
+
+def test_duck_penalty_costs_reward_while_crouching():
+    cfg = EnvConfig(levels=["YoshiIsland2"], reward=RewardConfig(duck_penalty=1.0), stuck_frames=900)
+    env = SmwEnv(cfg)
+    env.reset()
+    total = 0.0
+    for _ in range(25):
+        a = np.zeros(len(BUTTONS), dtype=bool)
+        a[BUTTONS.index("DOWN")] = True
+        _, r, term, trunc, _ = env.step(a)
+        total += r
+    assert total < -40                              # 4 frames per step x 1.0 for most of the 25 steps

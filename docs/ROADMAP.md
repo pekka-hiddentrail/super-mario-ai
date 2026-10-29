@@ -124,6 +124,12 @@ population 60, adaptive mutation): `explore` mean best x 540, `ride` 540 (no cha
 to x 1149 along a high route (4 climbs, up to y 36), the other two did not move. So the climb incentive helped once; platform perception alone did not.
 The saved state `states/manual_*.state` is raw (not loadable as a retro state); it is for analysis only, training always starts at the level start.
 
+## What the user saw in the ride-climb videos (Yoshi's Island 3, seeds 5, 7, 8)
+Seed 5: crouched most of the time (DOWN on 75-95% of steps, ducking 45-100%); its best run is a lucky generation-1 genome that nothing beat.
+Seed 7: in the air most of the time, never reached the bridge (ended x 782, fell). Seed 8: from x ~1157 it jumps up and down in one spot under blocks.
+Causes found: nothing discourages ducking; and the jump model ignored ceilings, so from below a platform it predicted landing on top of it.
+Fixes: `duck_penalty` (per frame ducking) and the `ride2` input mode (head bump). Test: `configs/experiments/ride2_yi3.toml` (same seeds as ride_climb_more).
+
 ## Special moves (user notes)
 - Running and pressing DOWN makes Mario slide (ducking pose, keeps momentum, smaller hitbox). Flying with the cape and riding Yoshi are special moves too.
 - Measured in the best runs so far (`scripts/count_moves.py`): sliding 0-5% of steps (DOWN held 0-39%), riding Yoshi 0%, cape 0%, flying 0%. The agents do not

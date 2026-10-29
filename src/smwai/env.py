@@ -31,6 +31,7 @@ class RewardConfig:
     yoshi_coin_bonus: float = 0.0  # per big (Yoshi) coin
     block_bonus: float = 0.0       # per ? block hit (any block that turns into a used block)
     goal_bar_bonus: float = 0.0    # per bonus star won at the goal bar: hitting the bar higher pays more
+    duck_penalty: float = 0.0      # per emulator frame spent ducking or sliding (nothing discourages crouching otherwise)
     water_penalty: float = 0.0     # per emulator frame spent in water (off: it is not clear yet that avoiding water is right)
     height_bonus: float = 0.0      # per pixel of new standing height: landing on something higher than ever before
     pipe_bonus: float = 0.0         # per pipe entered, down or sideways (each pipe pays once per episode)
@@ -57,7 +58,7 @@ def view(cfg):
 def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
     scalars = [("in_water", "scalar"), ("on_yoshi", "scalar"), ("powerup", "scalar")]
-    if cfg.inputs == "ride":        # explore + a platform channel: moving platforms are ground (and not enemies) for the network and the jump model
+    if cfg.inputs in ("ride", "ride2"):        # explore + a platform channel: moving platforms are ground (and not enemies) for the network and the jump model
         motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
         return ([("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid"), ("pipe", "grid"), ("platform", "grid")]
                 + scalars + motion + [(name, "scalar") for name in jumpview.names()])
@@ -84,20 +85,20 @@ def n_inputs(cfg):
 
 def build_observation(ram, state, cfg):
     """Flat int8 vector in input_layout order."""
-    if cfg.inputs in ("channels", "collect", "physics", "explore", "ride"):
-        collect = cfg.inputs in ("collect", "physics", "explore", "ride")
-        enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect, skip_platforms=cfg.inputs == "ride")
+    if cfg.inputs in ("channels", "collect", "physics", "explore", "ride", "ride2"):
+        collect = cfg.inputs in ("collect", "physics", "explore", "ride", "ride2")
+        enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect, skip_platforms=cfg.inputs in ("ride", "ride2"))
         parts = [R.solid_grid(ram, state, view(cfg)).ravel(), enemy.ravel(), item.ravel()]
         if collect:
             parts.append(R.coin_grid(ram, state, view(cfg)).ravel())
-        if cfg.inputs in ("explore", "ride"):
+        if cfg.inputs in ("explore", "ride", "ride2"):
             parts.append(R.pipe_grid(ram, state, view(cfg)).ravel())
-        if cfg.inputs == "ride":
+        if cfg.inputs in ("ride", "ride2"):
             parts.append(R.platform_grid(state, view(cfg)).ravel())
         parts.append(np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8))
-        if cfg.inputs in ("physics", "explore", "ride"):
+        if cfg.inputs in ("physics", "explore", "ride", "ride2"):
             parts.append(np.array(jumpview.motion_scalars(state), dtype=np.int8))
-            parts.append(jumpview.features(ram, state, ride=cfg.inputs == "ride"))
+            parts.append(jumpview.features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2"))
         return np.concatenate(parts).astype(np.int8)
     return R.tile_grid(ram, state, view(cfg)).ravel()
 
@@ -179,6 +180,8 @@ class SmwEnv(gym.Env):
         reward = -rc.time_penalty * self.cfg.frame_skip
         if self.state.in_water:
             reward -= rc.water_penalty * self.cfg.frame_skip
+        if self.state.ducking:
+            reward -= rc.duck_penalty * self.cfg.frame_skip
         if self.state.x > self.max_x:
             reward += rc.progress * (self.state.x - self.max_x)
             self.max_x = self.state.x

@@ -136,3 +136,29 @@ def test_ride_mode_hides_platforms_from_enemies_and_lands_on_them():
     ride = jumpview.features(w, st, ride=True).reshape(6, 5)
     assert plain[1][0] == -1                                                  # without the platform: a pit
     assert ride[1][0] == 1 and ride[1][1] == 0                                # with it: lands, and the bridge is no enemy
+
+
+def test_ceiling_bump_stops_a_jump_from_below_a_platform_from_landing_on_top():
+    w = wram()
+    flat_level(w)
+    _put_sprite(w, 0, R.BRIDGE_SPRITE, 130, 24 * 16 - 3 * 16, ext=32)       # five blocks whose bottom edge touches Mario's head
+    st = state_at(w, 130 - 8, 24 * 16 - 32, x_speed=0)                        # standing directly under the middle block
+    no_ceiling = jumpview.features(w, st, ride=True, ceilings=False).reshape(6, 5)
+    with_ceiling = jumpview.features(w, st, ride=True, ceilings=True).reshape(6, 5)
+    assert no_ceiling[2][4] < 0                                               # old model: 'lands on the platform' (dy negative = higher)
+    assert with_ceiling[2][4] == 0 and with_ceiling[2][0] == 1                # new model: bumps and comes back down to the ground
+
+
+def test_ceilings_off_matches_the_old_arc_exactly():
+    w = wram()
+    flat_level(w)
+    st = state_at(w, 100, 24 * 16 - 32, x_speed=36)
+    a = jumpview.features(w, st, ride=False, ceilings=False)
+    b = jumpview.features(w, st)
+    assert (a == b).all() and a.reshape(6, 5)[1][0] == 1
+
+
+def test_ride2_has_the_ride_layout():
+    from smwai.env import EnvConfig, input_layout, n_inputs
+    assert input_layout(EnvConfig(inputs="ride2")) == input_layout(EnvConfig(inputs="ride"))
+    assert n_inputs(EnvConfig(inputs="ride2")) == n_inputs(EnvConfig(inputs="ride"))

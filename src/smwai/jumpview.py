@@ -31,24 +31,37 @@ def _clip(v, lo, hi):
     return int(max(lo, min(hi, round(v))))
 
 
-def _option(ram, state, vy0, hold, enemies, blocks=()):
+def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False):
+    """One jump option. ceilings=True: rising into a solid tile or platform block bumps the head (the rise stops), so a jump from
+    below a platform no longer 'lands on top of it'."""
     cx0, feet0 = state.x + 8, state.y + FEET
     coins, hit = set(), 0
-    for p in physics.trajectory_from(state.x_speed, vy0, hold, 100):
-        cx, feet = cx0 + p.dx, feet0 + p.dy
+    vy, dy = vy0, 0.0
+    for t in range(100):
+        dx = (t + 1) * state.x_speed / 16
+        cx = cx0 + dx
+        step = vy / 16
+        if ceilings and vy < 0:
+            head = feet0 + dy + step - FEET
+            if R.solid_at(ram, cx, head) or R.on_platform(blocks, cx, head):
+                vy, step = 0, 0.0                              # head bump: no more rise, the arc turns down
+        dy += step
+        feet = feet0 + dy
         if feet > LEVEL_BOTTOM:
-            break                                        # below the level: a pit
+            break                                              # below the level: a pit
         for ex, ey in enemies:
             if abs(ex + 8 - cx) < 14 and abs(ey + 8 - (feet - 16)) < 20:
                 hit = 1
         if R.coin_at(ram, cx, feet - 16):
             coins.add((int(cx) // 16, int(feet - 16) // 16))
-        if p.vy > 0 and (R.solid_at(ram, cx, feet) or R.on_platform(blocks, cx, feet)):
+        if vy > 0 and (R.solid_at(ram, cx, feet) or R.on_platform(blocks, cx, feet)):
             return [1, hit, min(len(coins), 3), _clip((cx - cx0) / 16, -15, 15), _clip((feet - feet0) / 16, -8, 8)]
+        gravity = physics.GRAVITY_HELD if (t + 1 < hold and vy < physics.HELD_LIMIT) else physics.GRAVITY_FREE
+        vy = min(vy + gravity, physics.TERMINAL)
     return [-1, hit, min(len(coins), 3), 0, 0]
 
 
-def features(ram, state, ride=False):
+def features(ram, state, ride=False, ceilings=False):
     """The 30 jump-option values, in the order of names(). ride=True: moving platforms are ground, not enemies."""
     enemies = [(s.x, s.y) for s in state.sprites if s.kind == "enemy" and not (ride and s.number in R.PLATFORM_SPRITES)]
     blocks = R.platform_blocks(state) if ride else ()
@@ -56,7 +69,7 @@ def features(ram, state, ride=False):
     for button in BUTTONS_MODELLED:
         for hold in HOLDS:
             vy0 = state.y_speed if state.in_air else physics.takeoff_for(button, state.x_speed)
-            out += _option(ram, state, vy0, hold, enemies, blocks)
+            out += _option(ram, state, vy0, hold, enemies, blocks, ceilings)
     return np.array(out, dtype=np.int8)
 
 

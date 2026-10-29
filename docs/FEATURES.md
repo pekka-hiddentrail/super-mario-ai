@@ -48,7 +48,10 @@ After changing code, restart the servers (`restart_ui.sh`): a running page does 
 - PPO has no resume and an unstable evaluation. Experiments use 2-5 seeds, so they rank ideas, they do not prove them.
 
 ## Live view (`smwai live`, `scripts/restart_live.sh`)
-http://localhost:8767 plays the newest saved best genome of the newest run (or `--run NAME`) in real time, with the network next to the game, and switches to each new generation (and each new run of an experiment) as it is saved. It is a replay of the best genome of each generation, not the training episodes themselves; it runs in its own process with its own emulator.
+http://localhost:8767 plays the newest saved best genome of the newest run (or `--run NAME`) in real time, with the network next to the game, and switches to each new generation (and each new run of an experiment) as it is saved. It runs in its own process with its own emulator.
+- Runs that save their population (`[live] save_population = true`, written to `population.pkl` each generation) are shown genome by genome, species by species, failures included; the caption says which species (k of n, how many genomes), which genome, its fitness and rank.
+- Other runs: the best genome of the newest generation.
+- `scripts/showcase.sh` starts a training run just for watching (Yoshi Island 1, 3 workers, `configs/showcase_yi1.toml`) together with the live view; other experiments can run alongside.
 
 ## Video network panel
 Input windows that are tall or have many single values (`ride`, `run_options`, ...) no longer get cut off: the panel is laid out on a larger canvas and shrunk to fit.

@@ -62,31 +62,60 @@ class LivePlayer(threading.Thread):
                 time.sleep(2)
                 continue
             try:
-                self.play(*pick)
-            except (OSError, ValueError, EOFError, pickle.UnpicklingError) as exc:      # files still being written
+                if (pick[0] / "population.pkl").exists():
+                    self.play_population(pick[0])
+                else:
+                    self.play_best(*pick)
+            except (OSError, ValueError, EOFError, KeyError, pickle.UnpicklingError) as exc:      # files still being written
                 self.status = f"waiting: {exc!r}"
                 time.sleep(2)
 
-    def play(self, run_dir, generation):
+    def play_best(self, run_dir, generation):
+        """Runs without a saved population: the best genome of the newest generation."""
         stem = run_dir / "best" / f"gen_{generation:04d}"
         rec = json.loads(stem.with_suffix(".json").read_text())
+        with open(stem.with_suffix(".pkl"), "rb") as f:
+            genome = pickle.load(f)
+        head = f"LIVE  {run_dir.name}   generation {generation}"
+        self.episode(run_dir, genome, head, f"best of the generation, fitness {rec['fitness']:.0f}", rec.get("death_map"))
+
+    def play_population(self, run_dir):
+        """Runs that save their population ([live] save_population): every genome of the generation in turn, species by species,
+        failures included. A new generation is picked up when the current genome's episode is over."""
+        pop_file = run_dir / "population.pkl"
+        with open(pop_file, "rb") as f:
+            data = pickle.load(f)
+        stamp = pop_file.stat().st_mtime
+        members = sorted(data["members"], key=lambda m: (m["species"], -m["fitness"]))
+        sizes = {}
+        for m in members:
+            sizes[m["species"]] = sizes.get(m["species"], 0) + 1
+        ranks = {m["gid"]: r + 1 for r, m in enumerate(sorted(members, key=lambda m: -m["fitness"]))}
+        species_ids = sorted(sizes)
+        for m in members:
+            sid = m["species"]
+            head = (f"LIVE {run_dir.name[:20]}  gen {data['generation']}  species {species_ids.index(sid) + 1}/{len(species_ids)}"
+                    f" ({sizes[sid]} genomes)")
+            note = f"genome {m['gid']}  fit {m['fitness']:.0f}  rank {ranks[m['gid']]}/{len(members)}"
+            self.episode(run_dir, m["genome"], head, note, None)
+            if pop_file.stat().st_mtime != stamp:
+                return
+
+    def episode(self, run_dir, genome, head, note, death_map):
         cfg = config.load(run_dir / "config.toml")
         neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
                                neat.DefaultStagnation, str(run_dir / "neat.cfg"))
-        with open(stem.with_suffix(".pkl"), "rb") as f:
-            genome = pickle.load(f)
         net = neat.nn.FeedForwardNetwork.create(genome, neat_cfg)
         graph = genome_graph(genome, neat_cfg)
         watch = graph["hidden"] + graph["outputs"]
         train.use_config(cfg.env)
         env = train._get_env()
         env.layout = input_layout(cfg.env)
-        env.death_map = rec.get("death_map")
+        env.death_map = death_map
         layout = [{"name": nm, "kind": k} for nm, k in env.layout]
         height = 224 * SCALE + BANNER
         panel = NetworkPanel(graph, layout, env_view(cfg.env), height)
-        head = f"LIVE  {run_dir.name}   generation {generation}"
-        self.status = f"{run_dir.name} generation {generation}"
+        self.status = f"{head.replace('LIVE  ', '')}  |  {note}"
         obs, info = env.reset()
         total, result = 0.0, ""
         while True:
@@ -98,18 +127,17 @@ class LivePlayer(threading.Thread):
             obs, reward, term, trunc, info = env.step(pressed)
             total += reward
             if term or trunc:
-                result = "cleared" if info.get("cleared") else "died" if info.get("died") else "timed out"
+                result = "cleared" if info.get("cleared") else "died" if info.get("died") else "stuck" if trunc else ""
             game = Image.fromarray(env.frame).resize((256 * SCALE, 224 * SCALE), Image.NEAREST)
             left = Image.new("RGB", (game.width, height))
             left.paste(game, (0, BANNER))
-            _caption(left, [head, f"fitness {rec['fitness']:.0f} in training   x {info['x']}   reward {total:.0f}"
-                                  + (f"   ({result})" if result else "")], None)
+            _caption(left, [head, f"{note}  x {info['x']}  reward {total:.0f}" + (f"   ({result})" if result else "")], None)
             canvas = Image.new("RGB", (game.width + PANEL_W, height))
             canvas.paste(left, (0, 0))
             canvas.paste(side, (game.width, 0))
             self.publish(canvas)
             if term or trunc:
-                time.sleep(1.5)
+                time.sleep(1.0)
                 return
             time.sleep(max(0.0, FRAME_SECONDS / self.speed - (time.time() - t0)))
 

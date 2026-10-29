@@ -76,6 +76,9 @@ NEAT_DEFAULTS = dict(
     survival_threshold=0.2, elitism=2, min_species_size=2)
 
 
+LIVE_DEFAULTS = dict(
+    save_population=False)  # write the whole population of each generation (population.pkl) so `smwai live` can show any genome, any species
+
 RETIRED_REWARD = {"duck_penalty"}      # removed again (no benefit); runs that used it still open, but replay without it
 
 ADAPT_DEFAULTS = dict(
@@ -126,6 +129,7 @@ class RunConfig:
     adapt: dict = None
     hybrid: dict = None
     novelty: dict = None
+    live: dict = None
 
     @property
     def n_inputs(self):
@@ -169,4 +173,5 @@ def load(path):
         checkpoint_every=train.get("checkpoint_every", 5), runs_dir=train.get("runs_dir", "runs"),
         neat={**NEAT_DEFAULTS, **raw.get("neat", {})}, seed=train.get("seed"),
         ppo={**PPO_DEFAULTS, **raw.get("ppo", {})}, adapt={**ADAPT_DEFAULTS, **raw.get("adapt", {})},
-        hybrid={**HYBRID_DEFAULTS, **raw.get("hybrid", {})}, novelty={**NOVELTY_DEFAULTS, **raw.get("novelty", {})})
+        hybrid={**HYBRID_DEFAULTS, **raw.get("hybrid", {})}, novelty={**NOVELTY_DEFAULTS, **raw.get("novelty", {})},
+        live={**LIVE_DEFAULTS, **raw.get("live", {})})

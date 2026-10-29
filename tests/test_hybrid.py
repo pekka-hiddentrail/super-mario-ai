@@ -20,8 +20,10 @@ def _population(tmp_path, n_in_cfg="configs/level1.toml"):
 def _grown_genome(tmp_path):
     ncfg, pop = _population(tmp_path)
     genome = next(iter(pop.population.values()))
-    for _ in range(30):                                   # add nodes and connections, so there are hidden layers
+    for _ in range(300):                                  # add nodes and connections, so there are hidden layers
         genome.mutate(ncfg.genome_config)
+        if len(genome.nodes) > len(ncfg.genome_config.output_keys) + 2:
+            break
     return ncfg, genome
 
 

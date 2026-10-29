@@ -117,11 +117,12 @@ class PoolEvaluator:
 class RunReporter(neat.reporting.BaseReporter):
     """Writes metrics.csv and records the best run of every generation."""
 
-    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None, novelty_cfg=None, death_inputs=False):
+    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None, novelty_cfg=None, death_inputs=False, live_cfg=None):
         self.dir = Path(run_dir)
         self.neat_cfg = neat_cfg
         self.adapt = adapt or {}
         self.nov = novelty_cfg or {}
+        self.live = live_cfg or {}
         self.deaths = deathmap.DeathMap() if death_inputs else None
         self.archive = novelty.NoveltyArchive(self.nov.get("k", 5), self.nov.get("archive_max", 300), self.nov.get("add_per_gen", 3))
         self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
@@ -203,10 +204,22 @@ class RunReporter(neat.reporting.BaseReporter):
             f.write(row + "\n")
         flag = "" if deterministic else "  (replay differs!)"
         self._log_slow()
+        self._save_population(population, species)
         self._remember_deaths(population)              # before novelty selection turns fitness into a blended score
         extra = self._novelty(population, best)
         print(f"gen {self.generation:4d}  best {best.fitness:8.1f}  mean {np.mean(fits):8.1f}  "
               f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}{extra}", flush=True)
+
+    def _save_population(self, population, species):
+        """With [live] save_population: the whole generation (genome, species, fitness), for the live view."""
+        if not self.live.get("save_population"):
+            return
+        members = [{"gid": gid, "species": species.get_species_id(gid), "fitness": g.fitness, "genome": g}
+                   for gid, g in population.items()]
+        tmp = self.dir / "population.tmp"
+        with open(tmp, "wb") as f:
+            pickle.dump({"generation": self.generation, "members": members}, f)
+        tmp.replace(self.dir / "population.pkl")
 
     def _log_slow(self, limit=30.0):
         """Some generations take minutes instead of seconds: note any single episode over `limit` seconds (slow.jsonl)."""
@@ -271,7 +284,7 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
         evaluator = HybridEvaluator(n_workers, stats, cfg.env, cfg.hybrid, run_dir / "hybrid.jsonl")
     else:
         evaluator = PoolEvaluator(n_workers, stats)
-    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty, cfg.env.death_inputs))
+    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty, cfg.env.death_inputs, cfg.live))
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:

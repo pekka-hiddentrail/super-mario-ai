@@ -106,7 +106,10 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   Fix built: `room_progress = true` (each room has its own furthest x, rooms fingerprinted by screen count and solid-tile count);
   test `configs/experiments/rooms_pipes.toml`. The first run of that test gave identical numbers because the 120-frame no-progress
   cut-off ended every pipe-taking run 30 steps after the pipe (animation + room loading give no control); fixed: the timer pauses
-  while `$88` > 0 or the game is not in a level, and the test was repeated.
+  while `$88` > 0 or the game is not in a level, and the test was repeated. **Result of the repeat** (explore inputs, pipe bonus 100000,
+  room_progress, 2 seeds, 12 generations): Yoshi's Island 4: both seeds now take the sideways pipe at x ~2751 (the way on; the early trap near
+  x 810 is gone) and one cleared the level after it (best fitness 103,921 and 102,827); Yoshi's Island 2: seed 2 takes the downward pipe at
+  x 3876 (best fitness 104,318), seed 1 does not. Videos: `exp-rooms-pipes-yi2-rooms-s2` (gen 8) and `exp-rooms-pipes-yi4-rooms-s1` (gen 6).
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits

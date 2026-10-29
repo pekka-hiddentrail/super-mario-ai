@@ -10,7 +10,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from . import jumpview
+from . import deathmap, jumpview
 from . import ram as R
 
 GAME = "SuperMarioWorld-Snes-v0"
@@ -43,6 +43,7 @@ class EnvConfig:
     radius: int = 6                # view: this many tiles every way around Mario ...
     window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
     inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options | explore: + pipes
+    death_inputs: bool = False     # + four inputs from the death map: where earlier attempts died or got stuck (deathmap.py)
     room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
@@ -56,6 +57,10 @@ def view(cfg):
 
 def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
+    return _base_layout(cfg) + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else [])
+
+
+def _base_layout(cfg):
     scalars = [("in_water", "scalar"), ("on_yoshi", "scalar"), ("powerup", "scalar")]
     if cfg.inputs in ("ride", "ride2"):        # explore + a platform channel: moving platforms are ground (and not enemies) for the network and the jump model
         motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
@@ -82,8 +87,15 @@ def n_inputs(cfg):
     return sum(cells if kind == "grid" else 1 for _, kind in input_layout(cfg))
 
 
-def build_observation(ram, state, cfg):
-    """Flat int8 vector in input_layout order."""
+def build_observation(ram, state, cfg, deaths=None):
+    """Flat int8 vector in input_layout order; `deaths` is the death map (DeathMap.export()) when cfg.death_inputs is on."""
+    obs = _base_observation(ram, state, cfg)
+    if cfg.death_inputs:
+        obs = np.concatenate([obs, np.array(deathmap.features(deaths, state.x), dtype=np.int8)])
+    return obs
+
+
+def _base_observation(ram, state, cfg):
     if cfg.inputs in ("channels", "collect", "physics", "explore", "ride", "ride2"):
         collect = cfg.inputs in ("collect", "physics", "explore", "ride", "ride2")
         enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect, skip_platforms=cfg.inputs in ("ride", "ride2"))
@@ -117,6 +129,7 @@ class SmwEnv(gym.Env):
         self.frame = None
         self.capture = None            # set to a list to collect every emulator frame (video)
         self.events = []
+        self.death_map = None          # DeathMap.export(): set by the trainer (and by replays) when cfg.death_inputs is on
         self.best_ground_y = 0
         self._pipes = set()
         self.room_max, self.room_sig, self._room_pending = {}, None, False
@@ -137,7 +150,7 @@ class SmwEnv(gym.Env):
     def _read(self):
         ram = R.wram(self._env.unwrapped.get_ram())
         st = R.read_state(ram)
-        return st, build_observation(ram, st, self.cfg)
+        return st, build_observation(ram, st, self.cfg, self.death_map)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)

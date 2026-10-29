@@ -9,7 +9,7 @@ from pathlib import Path
 import neat
 import numpy as np
 
-from . import neat_params, novelty
+from . import deathmap, neat_params, novelty
 from .env import BUTTONS, SmwEnv
 from .novelty import blend
 
@@ -81,8 +81,9 @@ def eval_genome(genome, config):
     return run_episode(genome, config)[0]
 
 
-def eval_genome_full(genome, config):
+def eval_genome_full(genome, config, death_map=None):
     """(fitness, emulator frames used, behaviour) so experiments can compare methods per frame of experience."""
+    _get_env().death_map = death_map
     total, _, info = run_episode(genome, config)
     return total, info["frames"], {"print": novelty.fingerprint(info["cells"], info.get("events", [])),
                                    "end": [info["x"], info["y"], bool(info.get("cleared"))]}
@@ -98,10 +99,10 @@ class PoolEvaluator:
 
     def evaluate(self, genomes, config):
         if self.pool is not None:
-            jobs = [self.pool.apply_async(eval_genome_full, (g, config)) for _, g in genomes]
+            jobs = [self.pool.apply_async(eval_genome_full, (g, config, self.stats.get("death_map"))) for _, g in genomes]
             results = [j.get() for j in jobs]
         else:
-            results = [eval_genome_full(g, config) for _, g in genomes]
+            results = [eval_genome_full(g, config, self.stats.get("death_map")) for _, g in genomes]
         for (_, genome), (fitness, _frames, _behaviour) in zip(genomes, results):
             genome.fitness = fitness
         self.stats["frames"] = sum(r[1] for r in results)
@@ -115,11 +116,12 @@ class PoolEvaluator:
 class RunReporter(neat.reporting.BaseReporter):
     """Writes metrics.csv and records the best run of every generation."""
 
-    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None, novelty_cfg=None):
+    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None, novelty_cfg=None, death_inputs=False):
         self.dir = Path(run_dir)
         self.neat_cfg = neat_cfg
         self.adapt = adapt or {}
         self.nov = novelty_cfg or {}
+        self.deaths = deathmap.DeathMap() if death_inputs else None
         self.archive = novelty.NoveltyArchive(self.nov.get("k", 5), self.nov.get("archive_max", 300), self.nov.get("add_per_gen", 3))
         self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
         self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
@@ -173,6 +175,7 @@ class RunReporter(neat.reporting.BaseReporter):
         fits = [g.fitness for g in population.values()]
         best = max(population.values(), key=lambda g: g.fitness)
         self._adapt_mutation(best.fitness)
+        _get_env().death_map = self.stats.get("death_map")          # the memory this generation's genomes had
         reward, actions, info = run_episode(best, config, record=True)
         deterministic = abs(reward - best.fitness) < 1e-6
         stem = self.dir / "best" / f"gen_{self.generation:04d}"
@@ -181,7 +184,8 @@ class RunReporter(neat.reporting.BaseReporter):
         stem.with_suffix(".json").write_text(json.dumps({
             "generation": self.generation, "fitness": best.fitness, "max_x": info["max_x"],
             "cleared": info["cleared"], "buttons": BUTTONS, "actions": actions,
-            "path": info["path"], "events": info.get("events", [])}))
+            "path": info["path"], "events": info.get("events", []),
+            "death_map": self.stats.get("death_map")}))
         if best.fitness > self.best_ever:
             self.best_ever = best.fitness
             with open(self.dir / "best_ever.pkl", "wb") as f:
@@ -197,9 +201,19 @@ class RunReporter(neat.reporting.BaseReporter):
         with open(self.csv, "a") as f:
             f.write(row + "\n")
         flag = "" if deterministic else "  (replay differs!)"
+        self._remember_deaths(population)              # before novelty selection turns fitness into a blended score
         extra = self._novelty(population, best)
         print(f"gen {self.generation:4d}  best {best.fitness:8.1f}  mean {np.mean(fits):8.1f}  "
               f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}{extra}", flush=True)
+
+    def _remember_deaths(self, population):
+        """Add where this generation's best runs ended to the death map the next generation's networks can read."""
+        behaviour = self.stats.get("behaviour")
+        if self.deaths is None or not behaviour:
+            return
+        raw = {gid: g.fitness for gid, g in population.items() if gid in behaviour}
+        self.deaths.update({gid: behaviour[gid]["end"] for gid in raw}, raw)
+        self.stats["death_map"] = self.deaths.export()
 
     def _novelty(self, population, best):
         """Score the generation's behaviour novelty and map coverage; with weight > 0 also turn fitness into the selection score."""
@@ -247,7 +261,7 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
         evaluator = HybridEvaluator(n_workers, stats, cfg.env, cfg.hybrid, run_dir / "hybrid.jsonl")
     else:
         evaluator = PoolEvaluator(n_workers, stats)
-    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty))
+    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty, cfg.env.death_inputs))
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:

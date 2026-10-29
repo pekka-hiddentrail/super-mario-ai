@@ -124,6 +124,13 @@ population 60, adaptive mutation): `explore` mean best x 540, `ride` 540 (no cha
 to x 1149 along a high route (4 climbs, up to y 36), the other two did not move. So the climb incentive helped once; platform perception alone did not.
 The saved state `states/manual_*.state` is raw (not loadable as a retro state); it is for analysis only, training always starts at the level start.
 
+## Novelty, coverage and the death map (exploration vs. fine-tuning)
+Built in three steps, each tested with a run of at most 10 minutes on Yoshi's Island 3 (inputs `ride`, climb bonus, adaptive mutation). All results are small samples (2-3 seeds), so they show direction, not proof.
+1. **Record only** (`novelty.py`, `novelty.jsonl` per run): each run gets a fingerprint (64 px map cells visited + event kinds); novelty = mean Jaccard distance to the 5 nearest in an archive and the generation; coverage = distinct cells any genome reached. Does not change training (seeds 4 and 5 reproduce best x 521 and 1143).
+2. **Novelty in selection** (`[novelty] weight`, fitness blended with novelty, best raw fitness always ranks first). 15 generations, seeds 4 and 5: weight 0.3 best x 411 and 525, weight 0.6 best x 522 and 1164; coverage did not rise (43-87 cells vs 55 and 96 without). No gain seen; the cell fingerprint mostly separates runs that die at different places on the same stretch.
+3. **Death map as inputs** (`deathmap.py`, `death_inputs = true`): where the best not-cleared runs of recent generations ended, as four inputs (here, near, far, distance to the nearest known spot ahead). 12 generations, seeds 4, 5, 6: best x 512, 533, 477 (plain `ride`: 521, 1143, 538, where 1143 was a lucky generation-1 genome). The map works (deaths pile up at x 416-540, the wall), but 12 generations were not enough for the networks to use it. No gain seen.
+Next: longer runs (30+ generations, more seeds) before judging 2 and 3; novelty on a richer fingerprint (what Mario did at the wall, not only where he stood); learning-progress as the switch between exploring and fine-tuning.
+
 ## What the user saw in the ride-climb videos (Yoshi's Island 3, seeds 5, 7, 8)
 Seed 5: crouched most of the time (DOWN on 75-95% of steps, ducking 45-100%); its best run is a lucky generation-1 genome that nothing beat.
 Seed 7: in the air most of the time, never reached the bridge (ended x 782, fell). Seed 8: from x ~1157 it jumps up and down in one spot under blocks.

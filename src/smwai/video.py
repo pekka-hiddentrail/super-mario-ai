@@ -177,6 +177,7 @@ def _play_network(run_dir, generation, env):
     net = neat.nn.FeedForwardNetwork.create(genome, neat_cfg)
     graph = genome_graph(genome, neat_cfg)
     watch = graph["hidden"] + graph["outputs"]
+    env.death_map = json.loads((run_dir / "best" / f"gen_{generation:04d}.json").read_text()).get("death_map")
     obs, info = env.reset()
     steps, total = [], 0.0
     while True:

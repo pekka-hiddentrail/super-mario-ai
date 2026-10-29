@@ -233,8 +233,8 @@ class HybridEvaluator(PoolEvaluator):
             before = genome.fitness
             refined = copy.deepcopy(genome)
             self._refine(refined, config)
-            fitness, frames, behaviour = self.pool.apply_async(eval_genome_full, (refined, config)).get() if self.pool is not None \
-                else eval_genome_full(refined, config)
+            fitness, frames, behaviour = self.pool.apply_async(eval_genome_full, (refined, config, self.stats.get("death_map"))).get() if self.pool is not None \
+                else eval_genome_full(refined, config, self.stats.get("death_map"))
             self.stats["frames"] += frames
             accepted = fitness > before + 1e-6
             if accepted:                                 # Lamarckian step: the learned weights are inherited

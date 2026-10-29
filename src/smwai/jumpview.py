@@ -11,6 +11,8 @@ way a player knows how far Mario flies. No emulator rollouts, no scripts. Checke
 the time, the landing is within one tile 65% of the time. Limits: walls, ceilings and bounces are ignored,
 only solid tiles (not ledges that are solid from above only) count as ground, enemies are taken as they are now.
 """
+import dataclasses
+
 import numpy as np
 
 from . import physics
@@ -25,6 +27,15 @@ LEVEL_BOTTOM = 27 * 16 + 48
 
 def names():
     return [f"{b}{h}:{f}" for b in BUTTONS_MODELLED for h in HOLDS for f in FIELDS]
+
+
+RUN_SPEED = 48           # full run speed (1/16 px per frame): what a run-up would give
+WALK_FRAMES = 60
+
+
+def run_names():
+    """'keep running' (no jump), then the six jumps as they would be from full run speed."""
+    return [f"run:{f}" for f in FIELDS] + [f"fast {b}{h}:{f}" for b in BUTTONS_MODELLED for h in HOLDS for f in FIELDS]
 
 
 def _clip(v, lo, hi):
@@ -67,11 +78,56 @@ def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=Fal
     return [-1, hit, min(len(coins), 3), 0, 0]
 
 
-def features(ram, state, ride=False, ceilings=False, fixed=False):
-    """The 30 jump-option values, in the order of names(). ride=True: moving platforms are ground, not enemies."""
+def _walk(ram, state, enemies, blocks, walls):
+    """Keep running right without jumping: where does Mario end up after WALK_FRAMES? Same five values as a jump option."""
+    speed = max(abs(state.x_speed), 24)
+    cx0, feet0 = state.x + 8, state.y + FEET
+    cx, feet, vy = cx0, float(feet0), 0.0
+    coins, hit = set(), 0
+    for _ in range(WALK_FRAMES):
+        nxt = cx + speed / 16
+        if walls and R.solid_at(ram, nxt + 7, feet - 16):
+            nxt = cx                                           # a wall: Mario stands still against it
+        cx = nxt
+        if R.solid_at(ram, cx, feet) or R.on_platform(blocks, cx, feet):
+            vy = 0.0
+        else:
+            vy = min(vy + physics.GRAVITY_FREE, physics.TERMINAL)
+            feet += vy / 16
+            if R.solid_at(ram, cx, feet) or R.on_platform(blocks, cx, feet):
+                feet, vy = (int(feet) // 16) * 16, 0.0         # landed on the tile top
+        if feet > LEVEL_BOTTOM:
+            return [-1, hit, min(len(coins), 3), 0, 0]
+        for ex, ey in enemies:
+            if abs(ex + 8 - cx) < 14 and abs(ey + 8 - (feet - 16)) < 20:
+                hit = 1
+        if R.coin_at(ram, cx, feet - 16):
+            coins.add((int(cx) // 16, int(feet - 16) // 16))
+    return [1, hit, min(len(coins), 3), _clip((cx - cx0) / 16, -15, 15), _clip((feet - feet0) / 16, -8, 8)]
+
+
+def run_features(ram, state, ride=False, ceilings=False, fixed=False):
+    """35 values in the order of run_names(): the 'keep running' option, then the jump options as if Mario ran at full speed
+    (what a run-up would make possible)."""
+    enemies, blocks = _scene(state, ride, fixed)
+    out = _walk(ram, state, enemies, blocks, fixed)
+    fast = dataclasses.replace(state, x_speed=RUN_SPEED)
+    for button in BUTTONS_MODELLED:
+        for hold in HOLDS:
+            vy0 = state.y_speed if state.in_air else physics.takeoff_for(button, RUN_SPEED)
+            out += _option(ram, fast, vy0, hold, enemies, blocks, ceilings, walls=fixed)
+    return np.array(out, dtype=np.int8)
+
+
+def _scene(state, ride, fixed):
     enemies = [(s.x, s.y) for s in state.sprites if s.kind == "enemy" and not (ride and s.number in R.PLATFORM_SPRITES)
                and not (fixed and s.number in R.HARMLESS_SPRITES)]
-    blocks = R.platform_blocks(state) if ride else ()
+    return enemies, (R.platform_blocks(state) if ride else ())
+
+
+def features(ram, state, ride=False, ceilings=False, fixed=False):
+    """The 30 jump-option values, in the order of names(). ride=True: moving platforms are ground, not enemies."""
+    enemies, blocks = _scene(state, ride, fixed)
     out = []
     for button in BUTTONS_MODELLED:
         for hold in HOLDS:

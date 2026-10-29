@@ -46,6 +46,7 @@ class EnvConfig:
     death_inputs: bool = False     # + four inputs from the death map: where earlier attempts died or got stuck (deathmap.py)
     jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
                                    # values stay as they were at takeoff while Mario is in the air
+    run_options: bool = False      # + 'keep running' and the jump options as from full run speed (jumpview.run_names): 35 inputs
     cancel_opposites: bool = False  # LEFT+RIGHT cancel each other, and so do UP+DOWN (networks otherwise hold both most of the time)
     room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
@@ -69,7 +70,8 @@ def view(cfg):
 
 def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
-    return _base_layout(cfg) + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else [])
+    return (_base_layout(cfg) + ([(name, "scalar") for name in jumpview.run_names()] if cfg.run_options else [])
+            + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else []))
 
 
 def _base_layout(cfg):
@@ -102,6 +104,15 @@ def n_inputs(cfg):
 def build_observation(ram, state, cfg, deaths=None, memory=None):
     """Flat int8 vector in input_layout order; `deaths` is the death map (DeathMap.export()) when cfg.death_inputs is on."""
     obs = _base_observation(ram, state, cfg, memory)
+    if cfg.run_options:
+        if cfg.jump_fixes and state.in_air and memory is not None and "run" in memory:
+            extra = memory["run"]
+        else:
+            extra = jumpview.run_features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2",
+                                          fixed=cfg.jump_fixes)
+            if memory is not None:
+                memory["run"] = extra
+        obs = np.concatenate([obs, extra])
     if cfg.death_inputs:
         obs = np.concatenate([obs, np.array(deathmap.features(deaths, state.x), dtype=np.int8)])
     return obs

@@ -137,7 +137,8 @@ Next: novelty on a richer fingerprint (what Mario did at the wall, not only wher
 - In the air the six jump options were recomputed every frame, although Mario can no longer pick a jump; their coin counts and landing offsets jumped around.
 - "land -1" for all six options at the end of a ledge was correct here: the chasm is wider than any single jump reaches. The way on is the swinging platform, which the model only knows at its current position.
 - Built, off by default so old runs replay: `jump_fixes = true` (message box is no enemy, walls stop the arc, jump values are held at their takeoff value while airborne), `cancel_opposites = true` (left+right and up+down cancel each other).
-- Idea (not built): a seventh option 'keep running, no jump', so the network is told when running on is also deadly. Scripted overrides of the network's buttons stay out (ground rules): the model informs, the network decides.
+- Built: `run_options = true` adds 35 inputs: 'keep running, no jump' (where does Mario end up after 60 frames: pit, enemy, coins, dx, dy) and the six jump options as if Mario ran at full speed (what a run-up would allow). Scripted overrides of the network's buttons and rewinding stay out (ground rules): the model informs, the network decides.
+- Combined test (`combined_yi3.toml`: cancel_opposites + speed bonus 0.5 + jump_fixes + run_options, `ride` inputs, 15 generations, seeds 4, 6, 7): best x 548, 543, 545 (mean 545), no clear, all three stall at the wall at x ~545. The baseline (30 generations) gave 1154, 538, 1104. No gain from this bundle on this level.
 
 ## What the user saw in the ride-climb videos (Yoshi's Island 3, seeds 5, 7, 8)
 Seed 5: crouched most of the time (DOWN on 75-95% of steps, ducking 45-100%); its best run is a lucky generation-1 genome that nothing beat.

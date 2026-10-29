@@ -1,6 +1,7 @@
 import numpy as np
 
 from smwai import jumpview, physics
+from smwai import jumpview as J
 from smwai import ram as R
 
 
@@ -183,3 +184,18 @@ def test_message_box_is_not_an_enemy_and_walls_stop_the_arc_with_fixes(monkeypat
     monkeypatch.setattr(R, "solid_at", wall)
     assert J.features(None, st, fixed=False)[0] == 1                     # without wall handling the arc passes through the wall and lands behind it
     assert J.features(None, st, fixed=True)[3] <= 3                      # with it the arc stops at the wall (dx within ~2 tiles)
+
+
+def test_run_features_see_a_pit_ahead_and_the_run_up(monkeypatch):
+    class St:
+        x, y, x_speed, y_speed, in_air = 100, 300, 0, 0, False
+        sprites = []
+
+    import dataclasses
+    st = dataclasses.make_dataclass("S", [("x", int), ("y", int), ("x_speed", int), ("y_speed", int), ("in_air", bool), ("sprites", list)])(100, 300, 0, 0, False, [])
+    ground_to = 100 + 8 + 20                                              # ground ends 20 px ahead of Mario's centre
+    monkeypatch.setattr(R, "solid_at", lambda ram, x, y: y >= 332 and x < ground_to)
+    monkeypatch.setattr(R, "coin_at", lambda *a: False)
+    out = J.run_features(None, st, fixed=True).reshape(7, 5)
+    assert len(J.run_names()) == 35
+    assert out[0][0] == -1                                                # running on falls into the pit

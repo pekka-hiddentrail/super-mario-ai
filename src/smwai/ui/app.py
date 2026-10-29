@@ -107,6 +107,12 @@ def param_inputs(raw, prefix):
                                                      "standard jump would do. explore: + a pipe grid. ride: + a moving-platform grid "
                                                      "(bridges, swinging blocks count as ground, not enemies). ride2: the same, and jumps "
                                                      "from below a platform bump the head.")
+            raw["env"]["jump_fixes"] = st.checkbox(
+                "Jump inputs: fixed (walls, message box, held in the air)", value=bool(raw["env"].get("jump_fixes", False)),
+                key=prefix + "jumpfix", help="Walls stop a predicted arc, the message box is no enemy, and the jump values stay as at takeoff while Mario is in the air.")
+            raw["env"]["run_options"] = st.checkbox(
+                "Jump inputs: keep running + jumps from full run speed", value=bool(raw["env"].get("run_options", False)),
+                key=prefix + "runopt", help="35 more inputs: what running on would do, and what the jumps would do after a run-up.")
             raw["env"]["cancel_opposites"] = st.checkbox(
                 "Left+right and up+down cancel each other", value=bool(raw["env"].get("cancel_opposites", False)),
                 key=prefix + "cancel", help="Pressing both buttons of a pair presses neither.")

@@ -1,0 +1,26 @@
+# Everything from the last discussion on Yoshi's Island 3: opposite buttons cancel, speed bonus 0.5, fixed jump inputs (walls, message
+# box, values held in the air) and the run options ('keep running' + jumps from full run speed). `ride` inputs, climb bonus,
+# adaptive mutation. Baseline: the baseline variant of longer_yi3.toml (same seeds; 30 generations: best x 1154, 538, 1104).
+# Run: smwai experiment --spec configs/experiments/combined_yi3.toml
+name = "combined-yi3"
+base = "configs/yi3.toml"
+seeds = [4, 6, 7]
+generations = 15
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "combined"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+cancel_opposites = true
+jump_fixes = true
+run_options = true
+[variant.reward]
+height_bonus = 1.0
+speed_bonus = 0.5
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

@@ -206,6 +206,8 @@ class SmwEnv(gym.Env):
             self.best_ground_y = st.y
             if rc.height_bonus > 0:
                 self.stuck = 0
+        if st.pipe_timer > 0 or not st.in_level:
+            self.stuck = 0                                    # no control while in a pipe or while a room loads: not 'stuck'
         died = self.state.dying or self.state.lives < prev.lives
         cleared = self.state.level_cleared
         if died:

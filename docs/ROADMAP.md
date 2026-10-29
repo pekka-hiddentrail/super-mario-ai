@@ -104,7 +104,9 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   Yoshi's Island 4: both seeds took the early pipe near x 810 and stayed in the bonus room (best x 809 / 811) instead of the sideways pipe at
   x 2723. In every pipe-taking run the agent froze in the bonus room (x ~24) until the attempt timed out, so it forfeited the level clear.
   Fix built: `room_progress = true` (each room has its own furthest x, rooms fingerprinted by screen count and solid-tile count);
-  test `configs/experiments/rooms_pipes.toml`.
+  test `configs/experiments/rooms_pipes.toml`. The first run of that test gave identical numbers because the 120-frame no-progress
+  cut-off ended every pipe-taking run 30 steps after the pipe (animation + room loading give no control); fixed: the timer pauses
+  while `$88` > 0 or the game is not in a level, and the test was repeated.
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits

@@ -78,3 +78,24 @@ def test_room_progress_pays_progress_inside_the_bonus_room():
     assert entered
     assert after_pipe > 100                         # walking right in the bonus room counts again
     assert info["max_x"] >= 3878                    # the reported furthest x stays the main level's
+
+
+def test_pipe_trip_does_not_count_as_being_stuck():
+    """With the default 120-frame patience the run used to be cut off right after a pipe (animation + room load)."""
+    env = SmwEnv(EnvConfig(levels=["YoshiIsland2"], room_progress=True, reward=RewardConfig(pipe_bonus=100000.0)))
+    env.reset()
+    pipe_step, last_step = None, 0
+    for t in range(900):
+        a = np.zeros(len(BUTTONS), dtype=bool)
+        in_main = env.state.rooms == 0 and t < 700
+        a[BUTTONS.index("RIGHT")] = a[BUTTONS.index("Y")] = (t % 40) < 34 if in_main else True
+        a[BUTTONS.index("B")] = (t % 14) < 3
+        a[BUTTONS.index("DOWN")] = (t % 5) < 2 if in_main else False
+        _, r, term, trunc, info = env.step(a)
+        last_step = t
+        if pipe_step is None and any(e[1] == "pipe" for e in env.events):
+            pipe_step = t
+        if term or trunc:
+            break
+    assert pipe_step is not None
+    assert last_step > pipe_step + 45          # alive well beyond the 30 steps the old cut-off allowed

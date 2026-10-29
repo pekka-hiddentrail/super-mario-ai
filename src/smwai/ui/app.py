@@ -137,7 +137,6 @@ def param_inputs(raw, prefix):
                            ("height_bonus", "Climb bonus (per pixel higher than ever before)"),
                            ("pipe_bonus", "Pipe bonus (entering a pipe, once per pipe)"),
                            ("water_penalty", "Water penalty (per frame in water)"),
-                           ("duck_penalty", "Duck penalty (per frame crouching or sliding)"),
                            ("speed_bonus", "Speed bonus (per px/frame running)"),
                            ("clear_time_bonus", "Fast-clear bonus (shrinks with time)"),
                            ("clear_time_ref", "...reaches zero at N frames")]:

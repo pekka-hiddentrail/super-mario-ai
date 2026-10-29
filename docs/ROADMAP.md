@@ -128,7 +128,7 @@ The saved state `states/manual_*.state` is raw (not loadable as a retro state); 
 Seed 5: crouched most of the time (DOWN on 75-95% of steps, ducking 45-100%); its best run is a lucky generation-1 genome that nothing beat.
 Seed 7: in the air most of the time, never reached the bridge (ended x 782, fell). Seed 8: from x ~1157 it jumps up and down in one spot under blocks.
 Causes found: nothing discourages ducking; and the jump model ignored ceilings, so from below a platform it predicted landing on top of it.
-Fixes: `duck_penalty` (per frame ducking) and the `ride2` input mode (head bump). Test: `configs/experiments/ride2_yi3.toml` (same seeds as ride_climb_more).
+Tried: a `duck_penalty` reward (no better progress, mean fitness 600 vs 538; removed again) and the `ride2` input mode (head bump). Result on seeds 4-9, 20 gens: ride2 mean best x 506 vs 785 for ride-climb, so ride2 did worse; all stalled near x 460-550. Not understood yet.
 
 ## Special moves (user notes)
 - Running and pressing DOWN makes Mario slide (ducking pose, keeps momentum, smaller hitbox). Flying with the cape and riding Yoshi are special moves too.

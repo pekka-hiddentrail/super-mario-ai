@@ -1,6 +1,6 @@
 # What the user saw in the ride-climb videos (seeds 5, 7, 8): crouching most of the time, jumping without reaching the bridge, and
-# jumping up and down under the blocks. Two fixes: `ride2` (the jump options know that rising into a block bumps the head, so a jump from
-# below a platform no longer 'lands on top of it') and a small duck penalty. Same seeds, generations and settings as ride_climb_more.toml,
+# jumping up and down under the blocks. One fix: `ride2` (the jump options know that rising into a block bumps the head, so a jump from
+# below a platform no longer 'lands on top of it'). Same seeds, generations and settings as ride_climb_more.toml,
 # whose results (`ride-climb`: best x 521, 1143, 538, 782, 1202, 524) are the baseline.
 # Run: smwai experiment --spec configs/experiments/ride2_yi3.toml
 name = "ride2-yi3"
@@ -17,19 +17,6 @@ levels = ["YoshiIsland3"]
 inputs = "ride2"
 [variant.reward]
 height_bonus = 1.0
-[variant.adapt]
-enabled = true
-stall_generations = 3
-min_improvement = 20.0
-
-[[variant]]
-name = "ride2-climb-duck"
-[variant.env]
-levels = ["YoshiIsland3"]
-inputs = "ride2"
-[variant.reward]
-height_bonus = 1.0
-duck_penalty = 0.05
 [variant.adapt]
 enabled = true
 stall_generations = 3

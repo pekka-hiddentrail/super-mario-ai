@@ -1,11 +1,11 @@
 # A few hours on Yoshi's Island 3: the setup that got Mario up to the high route (upview: 12 tiles of view upwards, climb bonus, fixed jump
-# inputs, opposite buttons cancel, adaptive mutation) with and without the platform prediction (bridge), two seeds each, 250 generations,
+# inputs, opposite buttons cancel, adaptive mutation) with and without the platform prediction (bridge), seed 4, 250 generations,
 # population 80. Seed 4 reached x 1154 in 15 generations with this setup, so the idea is that more generations (and the extra mutation
-# when it stalls) may carry it over the rest of the level. Order: seed 4 upview, seed 4 predict, seed 7 upview, seed 7 predict.
+# when it stalls) may carry it over the rest of the level. Order: upview, then predict (about 75 minutes each).
 # Run: scripts/long_yi3.sh   (detached; log in /tmp/long_yi3.log)
 name = "long-yi3"
 base = "configs/yi3.toml"
-seeds = [4, 7]
+seeds = [4]
 generations = 250
 pop_size = 80
 workers = 12

@@ -113,6 +113,9 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits
+- **Dead ends** (observed by the user): on Yoshi's Island 4, running past the sideways pipe entrance at x ~2723 leaves Mario stuck in the tunnel
+  for good, which is why every run without a pipe reward ends at x ~2793. The run only ends through the 120-frame no-progress cut-off.
+  Possible later: treat a dead end as a failure sooner (penalty or earlier cut-off) and let the network see that pipes are exits.
 - Background jobs stop when the Claude session ends and WSL is restarted; use checkpoints / `resume_run.sh`.
 - Tests need WSL (Windows Python lacks gymnasium and stable-retro).
 - Horizontal levels only (the tile map layout of vertical levels differs).

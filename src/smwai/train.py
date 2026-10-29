@@ -84,8 +84,9 @@ def eval_genome(genome, config):
 def eval_genome_full(genome, config, death_map=None):
     """(fitness, emulator frames used, behaviour) so experiments can compare methods per frame of experience."""
     _get_env().death_map = death_map
+    t0 = time.time()
     total, _, info = run_episode(genome, config)
-    return total, info["frames"], {"print": novelty.fingerprint(info["cells"], info.get("events", [])),
+    return total, info["frames"], {"seconds": round(time.time() - t0, 1), "print": novelty.fingerprint(info["cells"], info.get("events", [])),
                                    "end": [info["x"], info["y"], bool(info.get("cleared"))]}
 
 
@@ -201,10 +202,19 @@ class RunReporter(neat.reporting.BaseReporter):
         with open(self.csv, "a") as f:
             f.write(row + "\n")
         flag = "" if deterministic else "  (replay differs!)"
+        self._log_slow()
         self._remember_deaths(population)              # before novelty selection turns fitness into a blended score
         extra = self._novelty(population, best)
         print(f"gen {self.generation:4d}  best {best.fitness:8.1f}  mean {np.mean(fits):8.1f}  "
               f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}{extra}", flush=True)
+
+    def _log_slow(self, limit=30.0):
+        """Some generations take minutes instead of seconds: note any single episode over `limit` seconds (slow.jsonl)."""
+        for gid, b in (self.stats.get("behaviour") or {}).items():
+            if b.get("seconds", 0) > limit:
+                with open(self.dir / "slow.jsonl", "a") as f:
+                    f.write(json.dumps({"generation": self.generation, "genome": gid, "seconds": b["seconds"], "end": b["end"]}) + "\n")
+                print(f"   slow episode: genome {gid} took {b['seconds']}s", flush=True)
 
     def _remember_deaths(self, population):
         """Add where this generation's best runs ended to the death map the next generation's networks can read."""

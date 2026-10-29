@@ -140,6 +140,12 @@ Next: novelty on a richer fingerprint (what Mario did at the wall, not only wher
 - Built: `run_options = true` adds 35 inputs: 'keep running, no jump' (where does Mario end up after 60 frames: pit, enemy, coins, dx, dy) and the six jump options as if Mario ran at full speed (what a run-up would allow). Scripted overrides of the network's buttons and rewinding stay out (ground rules): the model informs, the network decides.
 - Combined test (`combined_yi3.toml`: cancel_opposites + speed bonus 0.5 + jump_fixes + run_options, `ride` inputs, 15 generations, seeds 4, 6, 7): best x 548, 543, 545 (mean 545), no clear, all three stall at the wall at x ~545. The baseline (30 generations) gave 1154, 538, 1104. No gain from this bundle on this level.
 
+## Reaching the high route (`upview_yi3.toml`)
+The combined runs stayed low (lowest y 261-267; the runs that passed the wall had climbed to y 41-68). The route is up and above, not across the chasm. Test: `ride`, climb bonus, no speed bonus, cancel_opposites, jump_fixes, and a view 12 tiles up (window [4, 9, 12, 3]); 15 generations, seeds 4, 6, 7: best x 1154, 537, 525 (mean 739). Details of the climbs in the next note.
+
+## Slow generations (noted, not solved)
+Normal generations take 7-11 s (population 60, 12 workers). Some single generations take minutes: gen 0 of longer-yi3-novelty03-s7 took 1374 s and gen 3 765 s; `exp-combined-yi3-combined-s6` spent about 1000 s outside its generations. Not average slowness, so probably a stall: the PC or WSL sleeping, or one episode that does not end. `train.py` now logs every episode over 30 s to `slow.jsonl` (generation, genome, seconds, end position) and prints it, so the next occurrence names the culprit. Ideas to check if it is an episode: the stuck timer is paused while a room loads or a message box is open, so an episode can run to `max_frames` (20000).
+
 ## What the user saw in the ride-climb videos (Yoshi's Island 3, seeds 5, 7, 8)
 Seed 5: crouched most of the time (DOWN on 75-95% of steps, ducking 45-100%); its best run is a lucky generation-1 genome that nothing beat.
 Seed 7: in the air most of the time, never reached the bridge (ended x 782, fell). Seed 8: from x ~1157 it jumps up and down in one spot under blocks.

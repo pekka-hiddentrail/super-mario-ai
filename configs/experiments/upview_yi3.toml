@@ -1,0 +1,25 @@
+# Quick test that the high route is reachable: the combined run stayed low (lowest y 261-267; the runs that got past the wall had climbed to
+# y 41-68), so this one looks further up (12 tiles above Mario instead of 6) and drops the speed bonus, which pays for running along the ground.
+# Fixed jump inputs and cancelling opposite buttons stay on. Baseline: longer_yi3.toml (best x 1154, 538, 1104 in 30 generations).
+# Run: smwai experiment --spec configs/experiments/upview_yi3.toml
+name = "upview-yi3"
+base = "configs/yi3.toml"
+seeds = [4, 6, 7]
+generations = 15
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "upview"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+window = [4, 9, 12, 3]
+cancel_opposites = true
+jump_fixes = true
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

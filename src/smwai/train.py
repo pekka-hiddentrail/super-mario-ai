@@ -212,7 +212,11 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
     n_workers = cfg.workers if workers is None else workers
     # the pool must fork before this process creates its own emulator
     stats = {"frames": 0}
-    evaluator = PoolEvaluator(n_workers, stats)
+    if cfg.hybrid and cfg.hybrid.get("enabled"):
+        from .hybrid import HybridEvaluator        # NEAT + PPO: PPO refines the best genomes of each generation
+        evaluator = HybridEvaluator(n_workers, stats, cfg.env, cfg.hybrid, run_dir / "hybrid.jsonl")
+    else:
+        evaluator = PoolEvaluator(n_workers, stats)
     pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt))
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)

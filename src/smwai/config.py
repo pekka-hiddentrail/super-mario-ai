@@ -84,6 +84,18 @@ ADAPT_DEFAULTS = dict(
     structure_factor=1.5,   # conn_add_prob / node_add_prob multiplier while boosted
     rate_add=0.1)           # added to weight_mutate_rate while boosted (capped at 1)
 
+HYBRID_DEFAULTS = dict(
+    enabled=False,          # NEAT + PPO as one learner: PPO refines the best genomes of each generation (hybrid.py)
+    elites=2,               # how many of the best genomes are refined per generation
+    start_generation=2,     # first generation with refinement (NEAT alone finds a first working behaviour)
+    every=1,                # refine every N generations
+    n_envs=8,               # parallel emulators for the PPO rollouts
+    steps=128,              # steps per emulator per PPO iteration
+    iters=3,                # PPO iterations per refined genome (iters * steps * n_envs steps of fresh experience)
+    epochs=4, minibatch=256, clip=0.2, ent_coef=0.003, gamma=0.99, lam=0.95,
+    lr=0.003,               # learning rate on the genome's weights and biases
+    critic_lr=0.001, explore_eps=0.05, reward_scale=0.01)
+
 PPO_DEFAULTS = dict(
     total_steps=500_000, n_envs=8, n_steps=256, batch_size=512, n_epochs=4, learning_rate=3e-4,
     gamma=0.99, ent_coef=0.01, clip_range=0.2, reward_scale=0.01, eval_every=20_480,
@@ -102,6 +114,7 @@ class RunConfig:
     seed: int = None
     ppo: dict = None
     adapt: dict = None
+    hybrid: dict = None
 
     @property
     def n_inputs(self):
@@ -143,4 +156,5 @@ def load(path):
         generations=train.get("generations", 100), workers=train.get("workers", 4),
         checkpoint_every=train.get("checkpoint_every", 5), runs_dir=train.get("runs_dir", "runs"),
         neat={**NEAT_DEFAULTS, **raw.get("neat", {})}, seed=train.get("seed"),
-        ppo={**PPO_DEFAULTS, **raw.get("ppo", {})}, adapt={**ADAPT_DEFAULTS, **raw.get("adapt", {})})
+        ppo={**PPO_DEFAULTS, **raw.get("ppo", {})}, adapt={**ADAPT_DEFAULTS, **raw.get("adapt", {})},
+        hybrid={**HYBRID_DEFAULTS, **raw.get("hybrid", {})})

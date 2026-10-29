@@ -44,10 +44,22 @@ class EnvConfig:
     window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
     inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options | explore: + pipes
     death_inputs: bool = False     # + four inputs from the death map: where earlier attempts died or got stuck (deathmap.py)
+    jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
+                                   # values stay as they were at takeoff while Mario is in the air
+    cancel_opposites: bool = False  # LEFT+RIGHT cancel each other, and so do UP+DOWN (networks otherwise hold both most of the time)
     room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
+
+
+def cancel_opposites(action):
+    """Button vector with LEFT+RIGHT and UP+DOWN pairs switched off (neither is pressed when both are)."""
+    action = np.array(action, dtype=bool)
+    for a, b in ((BUTTONS.index("LEFT"), BUTTONS.index("RIGHT")), (BUTTONS.index("UP"), BUTTONS.index("DOWN"))):
+        if action[a] and action[b]:
+            action[a] = action[b] = False
+    return action
 
 
 def view(cfg):
@@ -87,18 +99,19 @@ def n_inputs(cfg):
     return sum(cells if kind == "grid" else 1 for _, kind in input_layout(cfg))
 
 
-def build_observation(ram, state, cfg, deaths=None):
+def build_observation(ram, state, cfg, deaths=None, memory=None):
     """Flat int8 vector in input_layout order; `deaths` is the death map (DeathMap.export()) when cfg.death_inputs is on."""
-    obs = _base_observation(ram, state, cfg)
+    obs = _base_observation(ram, state, cfg, memory)
     if cfg.death_inputs:
         obs = np.concatenate([obs, np.array(deathmap.features(deaths, state.x), dtype=np.int8)])
     return obs
 
 
-def _base_observation(ram, state, cfg):
+def _base_observation(ram, state, cfg, memory=None):
     if cfg.inputs in ("channels", "collect", "physics", "explore", "ride", "ride2"):
         collect = cfg.inputs in ("collect", "physics", "explore", "ride", "ride2")
-        enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect, skip_platforms=cfg.inputs in ("ride", "ride2"))
+        enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect, skip_platforms=cfg.inputs in ("ride", "ride2"),
+                                   skip_harmless=cfg.jump_fixes)
         parts = [R.solid_grid(ram, state, view(cfg)).ravel(), enemy.ravel(), item.ravel()]
         if collect:
             parts.append(R.coin_grid(ram, state, view(cfg)).ravel())
@@ -109,7 +122,14 @@ def _base_observation(ram, state, cfg):
         parts.append(np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8))
         if cfg.inputs in ("physics", "explore", "ride", "ride2"):
             parts.append(np.array(jumpview.motion_scalars(state), dtype=np.int8))
-            parts.append(jumpview.features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2"))
+            if cfg.jump_fixes and state.in_air and memory is not None and "jump" in memory:
+                parts.append(memory["jump"])                    # in the air the jump is under way: keep what the takeoff predicted
+            else:
+                jumps = jumpview.features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2",
+                                          fixed=cfg.jump_fixes)
+                if memory is not None:
+                    memory["jump"] = jumps
+                parts.append(jumps)
         return np.concatenate(parts).astype(np.int8)
     return R.tile_grid(ram, state, view(cfg)).ravel()
 
@@ -129,6 +149,7 @@ class SmwEnv(gym.Env):
         self.frame = None
         self.capture = None            # set to a list to collect every emulator frame (video)
         self.events = []
+        self._memory = {}
         self.death_map = None          # DeathMap.export(): set by the trainer (and by replays) when cfg.death_inputs is on
         self.best_ground_y = 0
         self._pipes = set()
@@ -150,7 +171,7 @@ class SmwEnv(gym.Env):
     def _read(self):
         ram = R.wram(self._env.unwrapped.get_ram())
         st = R.read_state(ram)
-        return st, build_observation(ram, st, self.cfg, self.death_map)
+        return st, build_observation(ram, st, self.cfg, self.death_map, self._memory)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -159,6 +180,7 @@ class SmwEnv(gym.Env):
         self.frame = self._env.reset()[0]
         for _ in range(2):  # let the first frames settle so RAM is valid
             self.frame = self._env.step(np.zeros(12, dtype=np.int8))[0]
+        self._memory = {}
         self.state, grid = self._read()
         self.max_x = self.state.x
         self.frames = 0
@@ -176,6 +198,8 @@ class SmwEnv(gym.Env):
                 "powerup": self.state.powerup, "frames": self.frames}
 
     def step(self, action):
+        if self.cfg.cancel_opposites:
+            action = cancel_opposites(action)
         pad = np.zeros(12, dtype=np.int8)
         for i, on in enumerate(action):
             if on:

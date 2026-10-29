@@ -132,6 +132,13 @@ Built in three steps, each tested with a run of at most 10 minutes on Yoshi's Is
 Longer test (`longer_yi3.toml`, 30 generations, seeds 4, 6, 7): best x per seed baseline 1154 / 538 / 1104 (mean 932), novelty 0.3: 524 / 784 / 1111 (mean 806), death map: 512 / 1135 / 549 (mean 732). None cleared. With this spread between seeds (500 to 1150 for the same setting) the three are not distinguishable; neither idea beat the baseline. Coverage followed the best x (the baseline runs that passed the wall covered ~95 cells, the ones stuck at it ~50).
 Next: novelty on a richer fingerprint (what Mario did at the wall, not only where he stood); learning-progress as the switch between exploring and fine-tuning.
 
+## Jump inputs: what a frame of exp-ride-yi3-explore-s1 (gen 13, steps 15-30) showed
+- The message box (sprite 0xB9, the speech-bubble block) counted as an enemy, in the enemy grid and in the jump arcs ("enemy 1"). In `explore` mode the swinging platform (sprite 0x5F) also counts as an enemy (`ride` modes treat it as ground).
+- In the air the six jump options were recomputed every frame, although Mario can no longer pick a jump; their coin counts and landing offsets jumped around.
+- "land -1" for all six options at the end of a ledge was correct here: the chasm is wider than any single jump reaches. The way on is the swinging platform, which the model only knows at its current position.
+- Built, off by default so old runs replay: `jump_fixes = true` (message box is no enemy, walls stop the arc, jump values are held at their takeoff value while airborne), `cancel_opposites = true` (left+right and up+down cancel each other).
+- Idea (not built): a seventh option 'keep running, no jump', so the network is told when running on is also deadly. Scripted overrides of the network's buttons stay out (ground rules): the model informs, the network decides.
+
 ## What the user saw in the ride-climb videos (Yoshi's Island 3, seeds 5, 7, 8)
 Seed 5: crouched most of the time (DOWN on 75-95% of steps, ducking 45-100%); its best run is a lucky generation-1 genome that nothing beat.
 Seed 7: in the air most of the time, never reached the bridge (ended x 782, fell). Seed 8: from x ~1157 it jumps up and down in one spot under blocks.

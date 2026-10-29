@@ -107,6 +107,9 @@ def param_inputs(raw, prefix):
                                                      "standard jump would do. explore: + a pipe grid. ride: + a moving-platform grid "
                                                      "(bridges, swinging blocks count as ground, not enemies). ride2: the same, and jumps "
                                                      "from below a platform bump the head.")
+            raw["env"]["cancel_opposites"] = st.checkbox(
+                "Left+right and up+down cancel each other", value=bool(raw["env"].get("cancel_opposites", False)),
+                key=prefix + "cancel", help="Pressing both buttons of a pair presses neither.")
             raw["env"]["room_progress"] = st.checkbox(
                 "Progress per room (pipes and bonus rooms)", value=bool(raw["env"].get("room_progress", False)),
                 key=prefix + "rooms", help="Each room keeps its own furthest x, so a bonus room is not a dead end.")

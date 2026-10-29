@@ -31,15 +31,21 @@ def _clip(v, lo, hi):
     return int(max(lo, min(hi, round(v))))
 
 
-def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False):
+def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=False):
     """One jump option. ceilings=True: rising into a solid tile or platform block bumps the head (the rise stops), so a jump from
     below a platform no longer 'lands on top of it'."""
     cx0, feet0 = state.x + 8, state.y + FEET
     coins, hit = set(), 0
     vy, dy = vy0, 0.0
+    cx = cx0
     for t in range(100):
-        dx = (t + 1) * state.x_speed / 16
-        cx = cx0 + dx
+        if walls:                                              # running into a solid tile at body height stops the sideways motion
+            nxt = cx + state.x_speed / 16
+            if state.x_speed and R.solid_at(ram, nxt + (7 if state.x_speed > 0 else -7), feet0 + dy - 16):
+                nxt = cx
+            cx = nxt
+        else:
+            cx = cx0 + (t + 1) * state.x_speed / 16
         step = vy / 16
         if ceilings and vy < 0:
             head = feet0 + dy + step - FEET
@@ -61,15 +67,16 @@ def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False):
     return [-1, hit, min(len(coins), 3), 0, 0]
 
 
-def features(ram, state, ride=False, ceilings=False):
+def features(ram, state, ride=False, ceilings=False, fixed=False):
     """The 30 jump-option values, in the order of names(). ride=True: moving platforms are ground, not enemies."""
-    enemies = [(s.x, s.y) for s in state.sprites if s.kind == "enemy" and not (ride and s.number in R.PLATFORM_SPRITES)]
+    enemies = [(s.x, s.y) for s in state.sprites if s.kind == "enemy" and not (ride and s.number in R.PLATFORM_SPRITES)
+               and not (fixed and s.number in R.HARMLESS_SPRITES)]
     blocks = R.platform_blocks(state) if ride else ()
     out = []
     for button in BUTTONS_MODELLED:
         for hold in HOLDS:
             vy0 = state.y_speed if state.in_air else physics.takeoff_for(button, state.x_speed)
-            out += _option(ram, state, vy0, hold, enemies, blocks, ceilings)
+            out += _option(ram, state, vy0, hold, enemies, blocks, ceilings, walls=fixed)
     return np.array(out, dtype=np.int8)
 
 

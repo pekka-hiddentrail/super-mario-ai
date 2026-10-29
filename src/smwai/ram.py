@@ -43,6 +43,7 @@ NEUTRAL_SPRITES = {0x35}   # Yoshi
 BRIDGE_SPRITE = 0x5A       # turn-block bridge: 5 solid blocks that pull in to one and push out again (value at $151C: 0..32)
 SWING_SPRITE = 0x5F        # chain-hung block that carries Mario (sprite position = the block; geometry only roughly checked)
 PLATFORM_SPRITES = {BRIDGE_SPRITE, SWING_SPRITE}
+HARMLESS_SPRITES = {0xB9}  # message box (the speech-bubble block): solid and harmless, not an enemy
 COIN_TILE = 0x2B           # Map16 low byte of a coin block (high byte 0)
 MAP16_LOW = 0xC800
 PIPE_TILES = range(0x34, 0x40)   # Map16 0x134-0x13F: the green pipe pieces (seen: 0x135-0x138 down pipe, 0x13B-0x13F sideways pipe)
@@ -213,7 +214,7 @@ def pipe_grid(ram, state, view=6):
     return grid
 
 
-def sprite_grids(state, view=6, legacy=True, skip_platforms=False):
+def sprite_grids(state, view=6, legacy=True, skip_platforms=False, skip_harmless=False):
     """(enemy, item) window grids with 1 where such a sprite is.
 
     legacy=True keeps the original behaviour (every non-item sprite, extended ones included, is an
@@ -229,6 +230,8 @@ def sprite_grids(state, view=6, legacy=True, skip_platforms=False):
         if not (0 <= row < rows and 0 <= col < cols):
             continue
         if skip_platforms and sp.number in PLATFORM_SPRITES:
+            continue
+        if skip_harmless and sp.number in HARMLESS_SPRITES:
             continue
         if legacy:
             (item if sp.is_item else enemy)[row, col] = 1

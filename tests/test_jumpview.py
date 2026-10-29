@@ -162,3 +162,24 @@ def test_ride2_has_the_ride_layout():
     from smwai.env import EnvConfig, input_layout, n_inputs
     assert input_layout(EnvConfig(inputs="ride2")) == input_layout(EnvConfig(inputs="ride"))
     assert n_inputs(EnvConfig(inputs="ride2")) == n_inputs(EnvConfig(inputs="ride"))
+
+
+def test_message_box_is_not_an_enemy_and_walls_stop_the_arc_with_fixes(monkeypatch):
+    import numpy as np
+    from smwai import ram as R
+    from smwai import jumpview as J
+
+    class St:
+        x, y, x_speed, y_speed, in_air = 100, 300, 24, 0, False
+        sprites = [R.Sprite(x=130, y=300, number=0xB9, is_item=False, kind="enemy")]
+
+    flat = lambda ram, x, y: y >= 332                                    # ground only
+    monkeypatch.setattr(R, "solid_at", flat)
+    monkeypatch.setattr(R, "coin_at", lambda *a: False)
+    st = St()
+    assert J.features(None, st, fixed=False)[1] == 1                     # as before: the message box counts as an enemy
+    assert J.features(None, st, fixed=True)[1] == 0
+    wall = lambda ram, x, y: y >= 332 or (x >= 140 and y >= 200)         # a tall wall ahead
+    monkeypatch.setattr(R, "solid_at", wall)
+    assert J.features(None, st, fixed=False)[0] == 1                     # without wall handling the arc passes through the wall and lands behind it
+    assert J.features(None, st, fixed=True)[3] <= 3                      # with it the arc stops at the wall (dx within ~2 tiles)

@@ -24,3 +24,14 @@ def test_death_inputs_add_four_scalars():
     more = EnvConfig(inputs="ride", death_inputs=True)
     assert n_inputs(more) == n_inputs(base) + 4
     assert [n for n, _ in input_layout(more)][-4:] == list(D.NAMES)
+
+
+def test_opposite_buttons_cancel():
+    import numpy as np
+    from smwai.env import BUTTONS, cancel_opposites
+    a = np.zeros(len(BUTTONS), dtype=bool)
+    for b in ("LEFT", "RIGHT", "UP", "A"):
+        a[BUTTONS.index(b)] = True
+    out = cancel_opposites(a)
+    assert not out[BUTTONS.index("LEFT")] and not out[BUTTONS.index("RIGHT")]
+    assert out[BUTTONS.index("UP")] and out[BUTTONS.index("A")] and a[BUTTONS.index("LEFT")]    # the input is not changed

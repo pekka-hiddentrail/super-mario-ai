@@ -1,0 +1,44 @@
+# Which single change helps NEAT most on Yoshi Island 1 (plateau near x ~3550: a Banzai Bill, then a pit)?
+# Every variant starts from the `collect` inputs; one change each. Two seeds, seed-major, so a stopped run still compares evenly.
+# Run: smwai experiment --spec configs/experiments/ladder_yi1.toml
+name = "ladder-yi1"
+base = "configs/yi1.toml"
+seeds = [1, 2]
+generations = 14
+pop_size = 50
+workers = 12
+
+[[variant]]
+name = "baseline"
+[variant.env]
+inputs = "collect"
+
+[[variant]]
+name = "adaptive"          # mutate harder after 3 generations without a new best
+[variant.env]
+inputs = "collect"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+
+[[variant]]
+name = "wide"              # see 8 tiles each way instead of 6 (17x17 grids)
+[variant.env]
+inputs = "collect"
+radius = 8
+
+[[variant]]
+name = "speed"             # reward running speed: long jumps over pits need it
+[variant.env]
+inputs = "collect"
+[variant.reward]
+speed_bonus = 0.5
+
+[[variant]]
+name = "mutate-more"       # static higher mutation, to compare with the adaptive boost
+[variant.env]
+inputs = "collect"
+[variant.neat]
+weight_mutate_power = 1.0
+conn_add_prob = 0.7
+node_add_prob = 0.3

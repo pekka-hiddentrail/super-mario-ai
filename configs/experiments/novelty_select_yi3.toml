@@ -1,0 +1,39 @@
+# Step 2: novelty as a selection pressure (weight 0.3 and 0.6), NEAT on Yoshi's Island 3.
+# The baseline (weight 0, same seeds) is novelty_record_yi3.toml: best x 521 and 1143.
+# Run: smwai experiment --spec configs/experiments/novelty_record_yi3.toml
+name = "novelty-select-yi3"
+base = "configs/yi3.toml"
+seeds = [4, 5]
+generations = 15
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "w03"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+[variant.novelty]
+enabled = true
+weight = 0.3
+
+[[variant]]
+name = "w06"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+[variant.novelty]
+enabled = true
+weight = 0.6

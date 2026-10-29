@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ROMs and emulator data (copyrighted / machine-specific)
+roms/*
+!roms/README.md
+*.sfc
+*.smc
+*.state
+*.srm
+
+# Training outputs
+runs/
+checkpoints/
+*.pool
+lightning_logs/
+wandb/
+tensorboard/
+
+# Local scratch
+states/*
+!states/README.md
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+configs/custom/

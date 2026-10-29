@@ -1,0 +1,10 @@
+# One tiny run to check the experiment pipeline and measure seconds per generation.
+name = "smoke"
+base = "configs/yi3.toml"
+seeds = [1]
+generations = 2
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "baseline"

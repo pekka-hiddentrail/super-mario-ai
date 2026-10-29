@@ -1,0 +1,22 @@
+# Step 3: the death map as four extra inputs (where earlier attempts died or got stuck), NEAT on Yoshi's Island 3.
+# Baseline, same seeds with the plain `ride` inputs: novelty_record_yi3 / ride_climb_more (best x 521, 1143, 538 within 12 generations).
+# Run: smwai experiment --spec configs/experiments/deathmap_yi3.toml
+name = "deathmap-yi3"
+base = "configs/yi3.toml"
+seeds = [4, 5, 6]
+generations = 12
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "deaths"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+death_inputs = true
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

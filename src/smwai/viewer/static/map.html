@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMW Path Map</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1d2026; --text: #e6e8ec; --muted: #8b93a1; --line: #2c313a;
+    --accent: #5aa9ff; --best: #f2994a; --coin: #f2cc60; --box: #e8833a; --pipe: #3fb950; --item: #bc8cff; --solid: #5b6573; --deco: #2f3640; --sky: #181b20; --bad: #f85149;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f5f7; --panel: #fff; --text: #1b1f24; --muted: #5b6573; --line: #d5d9e0;
+            --accent: #0b4fa8; --best: #c2410c; --coin: #b08800; --box: #c2410c; --pipe: #1a7f37; --item: #8250df; --solid: #6b7280; --deco: #d9dde4; --sky: #eef1f5; --bad: #cf222e; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; }
+  select, button, input[type=number] { font: inherit; color: var(--text); background: var(--bg);
+           border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  input[type=number] { width: 70px; }
+  button { cursor: pointer; } button:hover { border-color: var(--accent); }
+  label { color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  a { color: var(--accent); }
+  main { padding: 16px; }
+  #wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  canvas { display: block; }
+  #status { color: var(--muted); }
+  .legend { display: flex; gap: 16px; color: var(--muted); font-size: 12px; margin-top: 10px; flex-wrap: wrap; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  #table { margin-top: 14px; max-height: 260px; overflow: auto; background: var(--panel); border: 1px solid var(--line);
+           border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 10px; border-bottom: 1px solid var(--line); }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SMW Path Map</h1>
+  <a href="/">Replay viewer</a>
+  <label>Run <select id="run"></select></label>
+  <label>From gen <input id="from" type="number" min="0" value="0"></label>
+  <label>To <input id="to" type="number" min="0" value="0"></label>
+  <label>Every <input id="step" type="number" min="1" value="1" style="width:56px"></label>
+  <button id="load">Load paths</button>
+  <label>Zoom <select id="zoom"><option value="4">4</option><option value="6" selected>6</option>
+    <option value="8">8</option><option value="12">12</option></select></label>
+  <label><input id="tiles" type="checkbox" checked> Level tiles</label>
+  <span id="status"></span>
+</header>
+<main>
+  <div id="wrap"><canvas id="map" width="800" height="200"></canvas></div>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--solid)"></i>solid tile</span>
+    <span><i class="sw" style="background:var(--coin)"></i>coin (dot) / big coin (outlined block)</span>
+    <span><i class="sw" style="background:var(--box)"></i>box with something in it</span>
+    <span><i class="sw" style="background:var(--pipe)"></i>pipe</span>
+    <span>on the best run: dot = coin picked up, ring = big coin, triangle = power-up, diamond = box hit, blue square = pipe, blue dot = climbed higher</span>
+    <span><i class="sw" style="background:var(--deco)"></i>other tile (blocks, decoration)</span>
+    <span><i class="sw" style="background:var(--accent)"></i>run path - darker = higher fitness, lighter = lower</span>
+    <span><i class="sw" style="background:var(--best)"></i>best run</span>
+    <span>x = where a run ended (died / timed out), flag = cleared the level</span>
+  </div>
+  <div id="table"><table><thead><tr><th>Gen</th><th>Fitness</th><th>Furthest x</th><th>Result</th></tr></thead><tbody id="rows"></tbody></table></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const cv = $('map'), ctx = cv.getContext('2d');
+let runs = [], level = null, paths = [], events = [];
+
+async function init() {
+  runs = await (await fetch('/api/runs')).json();
+  $('run').innerHTML = runs.map(r => `<option>${r.name}</option>`).join('');
+  $('run').onchange = () => { setRange(); load(); };
+  const q = new URLSearchParams(location.search);
+  if (q.get('run') && runs.some(r => r.name === q.get('run'))) $('run').value = q.get('run');
+  setRange();
+  if (q.get('autoload') !== '0') load();       // open with the map already drawn
+}
+function setRange() {
+  const r = runs.find(x => x.name === $('run').value);
+  if (r && r.gens.length) { $('from').value = r.gens[0].gen; $('to').value = r.gens[r.gens.length - 1].gen; }
+}
+let loadToken = 0;
+async function load() {
+  const token = ++loadToken;                  // a newer load cancels an older one
+  const run = $('run').value, r = runs.find(x => x.name === run);
+  if (!r) { $('status').textContent = 'no runs with recorded generations yet'; return; }
+  const gens = r.gens.filter(g => g.gen >= +$('from').value && g.gen <= +$('to').value
+                                  && (g.gen - +$('from').value) % +$('step').value === 0);
+  $('load').disabled = false; paths = []; events = []; level = null; $('rows').innerHTML = '';
+  cv.width = 800; cv.height = 60; ctx.clearRect(0, 0, 800, 60);
+  ctx.fillStyle = css('--muted'); ctx.font = '14px system-ui'; ctx.fillText('Loading level map...', 12, 34);
+  try {
+    $('status').textContent = 'loading level map...';
+    const lv = await (await fetch(`/api/level?run=${encodeURIComponent(run)}`)).json();
+    if (lv.error) throw new Error(lv.error);
+    if (token !== loadToken) return;
+    level = lv; redraw();
+    const BATCH = 8;                          // fetch several generations at once, redraw once per batch
+    for (let i = 0; i < gens.length; i += BATCH) {
+      $('status').textContent = `loading paths ${Math.min(i + BATCH, gens.length)}/${gens.length}...`;
+      const got = await Promise.all(gens.slice(i, i + BATCH).map(g =>
+        fetch(`/api/path?run=${encodeURIComponent(run)}&gen=${g.gen}`).then(r => r.json())));
+      if (token !== loadToken) return;
+      const bad = got.find(p => p.error);
+      if (bad) throw new Error(bad.error);
+      paths.push(...got); redraw();
+    }
+    $('status').textContent = `${paths.length} runs`;
+    await loadEvents(run, token);
+  } catch (e) { $('status').textContent = 'error: ' + e.message; }
+  if (token === loadToken) $('load').disabled = false;
+}
+function redraw() {
+  if (!level) return;
+  const t = +$('zoom').value, cols = level.rows[0].length, rows = level.rows.length;
+  cv.width = cols * t; cv.height = rows * t;
+  ctx.fillStyle = css('--sky'); ctx.fillRect(0, 0, cv.width, cv.height);
+  if ($('tiles').checked) {
+    level.rows.forEach((row, y) => { for (let x = 0; x < cols; x++) {
+      const c = row[x]; if (c === '.') continue;
+      if (c === 'c') {                                   // coin: small dot
+        ctx.fillStyle = css('--coin'); ctx.beginPath(); ctx.arc((x + 0.5) * t, (y + 0.5) * t, Math.max(1.5, t * 0.3), 0, 7); ctx.fill();
+      } else if (c === 'Y') {                            // big coin: full gold block with outline
+        ctx.fillStyle = css('--coin'); ctx.fillRect(x * t, y * t, t, t);
+        ctx.strokeStyle = css('--text'); ctx.lineWidth = 1; ctx.strokeRect(x * t + 0.5, y * t + 0.5, t - 1, t - 1);
+      } else if (c === 'P') {                            // green pipe
+        ctx.fillStyle = css('--pipe'); ctx.fillRect(x * t, y * t, t, t);
+        ctx.strokeStyle = css('--text'); ctx.lineWidth = 1; ctx.strokeRect(x * t + 0.5, y * t + 0.5, t - 1, t - 1);
+      } else if (c === '?') {                            // box with something in it
+        ctx.fillStyle = css('--box'); ctx.fillRect(x * t, y * t, t, t);
+        ctx.strokeStyle = css('--text'); ctx.lineWidth = 1; ctx.strokeRect(x * t + 0.5, y * t + 0.5, t - 1, t - 1);
+      } else {
+        ctx.fillStyle = c === '#' ? css('--solid') : css('--deco');
+        ctx.fillRect(x * t, y * t, t, t);
+      }
+    } });
+  }
+  const fits = paths.map(p => p.fitness), lo = Math.min(...fits), hi = Math.max(...fits);
+  const order = [...paths].sort((a, b) => a.fitness - b.fitness);   // worst first, best on top
+  order.forEach((p, i) => {
+    const best = p === order[order.length - 1], k = hi > lo ? (p.fitness - lo) / (hi - lo) : 1;
+    ctx.globalAlpha = best ? 1 : 0.08 + 0.72 * k;
+    ctx.strokeStyle = best ? css('--best') : css('--accent'); ctx.lineWidth = best ? 2.5 : 1.2;
+    const { segments, endsInMain } = mainSegments(p.path);
+    ctx.beginPath();
+    segments.forEach(seg => seg.forEach(([x, y], j) => { const px = x / 16 * t, py = (y / 16 + 1) * t; j ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }));
+    ctx.stroke();
+    const last = segments[segments.length - 1], [ex, ey] = last[last.length - 1], px = ex / 16 * t, py = (ey / 16 + 1) * t;
+    if (!endsInMain) { /* the run ended in another room: no end marker on this map */ }
+    else if (p.cleared) {                       // flag
+      ctx.fillStyle = css('--best'); ctx.fillRect(px, py - 3 * t, 1.2, 3 * t); ctx.fillRect(px, py - 3 * t, 2 * t, t);
+    } else {                               // x where the run ended
+      ctx.strokeStyle = css('--bad'); ctx.lineWidth = 1.5; const s = Math.max(3, t * 0.6);
+      ctx.beginPath(); ctx.moveTo(px - s, py - s); ctx.lineTo(px + s, py + s); ctx.moveTo(px + s, py - s); ctx.lineTo(px - s, py + s); ctx.stroke();
+    }
+  });
+  ctx.globalAlpha = 1;
+  drawEvents(t);
+  $('rows').innerHTML =[...paths].sort((a, b) => b.fitness - a.fitness).map(p =>
+    `<tr><td>${p.generation}</td><td>${p.fitness.toFixed(0)}</td><td>${p.max_x}</td><td>${p.cleared ? 'cleared' : 'ended'}</td></tr>`).join('');
+}
+// A run that goes through a pipe or door continues in another room whose coordinates restart near x = 0.
+// Cut the path where it jumps and keep only the parts in the main level, so no line is drawn across the map.
+function mainSegments(path) {
+  const segs = [[path[0]]];
+  for (let i = 1; i < path.length; i++) {
+    if (Math.abs(path[i][0] - path[i - 1][0]) > 200) segs.push([]);       // a warp: x jumps by hundreds of pixels
+    segs[segs.length - 1].push(path[i]);
+  }
+  const keep = []; let lastEnd = 0, lastKept = true;
+  segs.forEach((seg, i) => {
+    if (!seg.length) return;
+    lastKept = !(i > 0 && seg[0][0] < 120 && lastEnd > 400);              // arrived at the left edge after a long run: bonus room
+    if (lastKept) { keep.push(seg); lastEnd = seg[seg.length - 1][0]; }
+  });
+  return { segments: keep.length ? keep : [path], endsInMain: lastKept };
+}
+// What the best run collected: small dot = coin, ring = big coin, triangle = power-up, diamond = box hit.
+function drawEvents(t) {
+  if (!events.length) return;
+  events.forEach(([frame, kind, x, y]) => {
+    const px = (x / 16 + 0.5) * t, py = (y / 16 + 0.5) * t, r = Math.max(3, t * 0.6);
+    ctx.lineWidth = 1.5; ctx.strokeStyle = css('--text');
+    ctx.beginPath();
+    if (kind === 'coin') { ctx.fillStyle = css('--coin'); ctx.arc(px, py, r * 0.8, 0, 7); }
+    else if (kind === 'yoshi') { ctx.fillStyle = 'transparent'; ctx.arc(px, py, r * 1.6, 0, 7); ctx.lineWidth = 2.5; ctx.strokeStyle = css('--coin'); }
+    else if (kind === 'pipe') { ctx.fillStyle = css('--accent'); ctx.rect(px - r * 1.4, py - r * 1.4, r * 2.8, r * 2.8); }
+    else if (kind === 'climb') { ctx.fillStyle = css('--accent'); ctx.arc(px, py - r, r * 0.6, 0, 7); }
+    else if (kind === 'powerup') { ctx.fillStyle = css('--item'); ctx.moveTo(px, py - r * 1.3); ctx.lineTo(px + r * 1.2, py + r); ctx.lineTo(px - r * 1.2, py + r); ctx.closePath(); }
+    else { ctx.fillStyle = css('--box'); ctx.moveTo(px, py - r * 1.2); ctx.lineTo(px + r * 1.2, py); ctx.lineTo(px, py + r * 1.2); ctx.lineTo(px - r * 1.2, py); ctx.closePath(); }
+    if (kind !== 'yoshi') ctx.fill();
+    ctx.stroke();
+  });
+}
+async function loadEvents(run, token) {        // events of the best run, replayed once if it was recorded without them
+  if (!paths.length) return;
+  const best = paths.reduce((a, b) => (b.fitness > a.fitness ? b : a));
+  $('status').textContent = `${paths.length} runs; loading what generation ${best.generation} collected...`;
+  const p = await (await fetch(`/api/path?run=${encodeURIComponent(run)}&gen=${best.generation}&events=1`)).json();
+  if (token !== loadToken || p.error) return;
+  events = p.events || [];
+  const n = k => events.filter(e => e[1] === k).length;
+  $('status').textContent = `${paths.length} runs; best run (gen ${best.generation}) collected ${n('coin')} coins, ` +
+    `${n('yoshi')} big coins, ${n('powerup')} power-ups, hit ${n('block')} boxes, ${n('pipe')} pipes, ${n('climb')} climbs`;
+  redraw();
+}
+$('load').onclick = load; $('zoom').onchange = redraw; $('tiles').onchange = redraw;
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+# Do the jump inputs help on levels built around big gaps? Yoshi Island 3 (gaps of 5, 8, 11 ... tiles) and 4
+# (5, 7, 12, 7, 15 ... tiles). Baseline = collect inputs + adaptive mutation (our best setup); physics = the same plus
+# speeds and jump options (jumpview.py). One change per pair. A full-speed full-hold jump covers about 9 tiles.
+# Run: smwai experiment --spec configs/experiments/gaps_yi34.toml
+name = "gaps-yi34"
+base = "configs/yi3.toml"
+seeds = [1, 2, 3]
+generations = 15
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "yi3-baseline"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "collect"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "yi3-physics"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "yi4-baseline"
+[variant.env]
+levels = ["YoshiIsland4"]
+inputs = "collect"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "yi4-physics"
+[variant.env]
+levels = ["YoshiIsland4"]
+inputs = "physics"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

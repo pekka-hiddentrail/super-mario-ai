@@ -1,0 +1,44 @@
+# Yoshi Island 4: every run so far stalls at x ~2793 because the way on is a sideways pipe at x ~2723 that the runs overshoot.
+# Does paying for entering it (pipe_bonus) get them through? `pipe-physics` adds the jump inputs. Collect inputs and adaptive
+# mutation everywhere. Count pipe events afterwards: scripts/count_events.py "exp-pipe-yi4-*"
+# Run: smwai experiment --spec configs/experiments/pipe_yi4.toml
+name = "pipe-yi4"
+base = "configs/yi3.toml"
+seeds = [1, 2]
+generations = 12
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "baseline"
+[variant.env]
+levels = ["YoshiIsland4"]
+inputs = "collect"
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "pipe"
+[variant.env]
+levels = ["YoshiIsland4"]
+inputs = "collect"
+[variant.reward]
+pipe_bonus = 100000.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "pipe-physics"
+[variant.env]
+levels = ["YoshiIsland4"]
+inputs = "physics"
+[variant.reward]
+pipe_bonus = 100000.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

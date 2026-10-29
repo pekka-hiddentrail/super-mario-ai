@@ -1,0 +1,39 @@
+# Yoshi Island 2 with coin inputs and power-up/coin rewards.
+name = "yi2-collect"
+
+[env]
+levels = ["YoshiIsland2"]
+inputs = "collect"        # solid, enemy, item, coin grids + water, Yoshi, power-up
+frame_skip = 4
+radius = 6
+stuck_frames = 120
+max_frames = 20000
+
+[reward]
+progress = 1.0
+clear_bonus = 1000.0
+time_penalty = 0.0
+death_penalty = 0.0
+powerup_bonus = 100.0     # per power-up state increase
+coin_bonus = 10.0           # per coin
+
+[train]
+generations = 30
+workers = 5
+checkpoint_every = 5
+runs_dir = "runs"
+seed = 1
+
+[neat]
+pop_size = 100
+initial_connection = "partial_direct 0.05"
+conn_add_prob = 0.5
+conn_delete_prob = 0.2
+node_add_prob = 0.2
+node_delete_prob = 0.1
+weight_mutate_rate = 0.8
+weight_mutate_power = 0.5
+compatibility_threshold = 3.0
+max_stagnation = 15
+survival_threshold = 0.2
+elitism = 2

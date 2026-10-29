@@ -1,0 +1,37 @@
+# Pipe bonus at a more balanced 3000 (the clear is worth about 5800 on these levels; a pipe is not the only way on). Was: 100000.
+# Take the pipe AND finish the level? Same as explore_pipes.toml (explore inputs, pipe bonus 100000, adaptive mutation) plus
+# room_progress: each room (main level, bonus room) has its own 'furthest x', so walking through the bonus room pays progress
+# and the run is no longer stuck there. Compare with the `explore-pipes` runs, where every pipe-taker froze in the bonus room.
+# Run: smwai experiment --spec configs/experiments/rooms_pipes.toml ; then scripts/count_events.py "exp-rooms-pipes-*"
+name = "rooms-pipes-3k"
+base = "configs/yi3.toml"
+seeds = [1, 2, 3]
+generations = 12
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "yi2-rooms"
+[variant.env]
+levels = ["YoshiIsland2"]
+inputs = "explore"
+room_progress = true
+[variant.reward]
+pipe_bonus = 3000.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "yi4-rooms"
+[variant.env]
+levels = ["YoshiIsland4"]
+inputs = "explore"
+room_progress = true
+[variant.reward]
+pipe_bonus = 3000.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

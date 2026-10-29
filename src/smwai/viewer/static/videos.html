@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMW Best Runs</title>
+<style>
+  :root { --bg: #14161a; --panel: #1d2026; --text: #e6e8ec; --muted: #8b93a1; --line: #2c313a; --accent: #5aa9ff; --ok: #3fb950; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f4f5f7; --panel: #fff; --text: #1b1f24; --muted: #5b6573; --line: #d5d9e0; --accent: #0b6bd3; --ok: #1a7f37; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; }
+  a { color: var(--accent); }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; padding: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .card h2 { font-size: 14px; margin: 0 0 2px; word-break: break-all; }
+  .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .ok { color: var(--ok); font-weight: 600; }
+  video { width: 100%; border-radius: 6px; background: #000; display: block; }
+  #empty { padding: 24px 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Best run of each training run</h1>
+  <a href="/">Replay viewer</a> <a href="/map">Path map</a>
+  <span style="color:var(--muted)">Videos are rendered with <code>scripts/video.sh</code>; one per run, for the generation with the highest fitness.</span>
+</header>
+<div id="empty" hidden>No videos yet. Run <code>scripts/video.sh</code> or use the Videos tab in the dashboard.</div>
+<main id="grid"></main>
+<script>
+fetch('/api/videos').then(r => r.json()).then(list => {
+  if (!list.length) document.getElementById('empty').hidden = false;
+  document.getElementById('grid').innerHTML = list.map(v => `
+    <div class="card">
+      <h2>${v.run}</h2>
+      <div class="meta">generation ${v.generation} &middot; fitness ${v.fitness == null ? '?' : v.fitness.toFixed(0)} &middot;
+        furthest x ${v.max_x} &middot; ${v.cleared ? '<span class="ok">cleared</span>' : 'did not clear'} &middot; ${v.size_mb} MB</div>
+      <video controls preload="metadata" src="/video/${encodeURIComponent(v.run)}/${encodeURIComponent(v.file)}"></video>
+    </div>`).join('');
+});
+</script>
+</body>
+</html>

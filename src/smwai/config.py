@@ -77,7 +77,8 @@ NEAT_DEFAULTS = dict(
 
 
 LIVE_DEFAULTS = dict(
-    save_population=False)  # write the whole population of each generation (population.pkl) so `smwai live` can show any genome, any species
+    save_population=False,  # write the whole population of each generation (population.pkl) so `smwai live` can show any genome, any species
+    save_history=False)     # also keep every generation (population_0007.pkl ...), for `smwai tour`
 
 RETIRED_REWARD = {"duck_penalty"}      # removed again (no benefit); runs that used it still open, but replay without it
 

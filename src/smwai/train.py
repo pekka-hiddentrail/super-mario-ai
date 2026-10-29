@@ -219,6 +219,8 @@ class RunReporter(neat.reporting.BaseReporter):
         tmp = self.dir / "population.tmp"
         with open(tmp, "wb") as f:
             pickle.dump({"generation": self.generation, "members": members}, f)
+        if self.live.get("save_history"):
+            shutil.copy(tmp, self.dir / f"population_{self.generation:04d}.pkl")
         tmp.replace(self.dir / "population.pkl")
 
     def _log_slow(self, limit=30.0):

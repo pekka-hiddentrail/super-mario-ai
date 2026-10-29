@@ -102,44 +102,63 @@ class LivePlayer(threading.Thread):
                 return
 
     def episode(self, run_dir, genome, head, note, death_map):
-        cfg = config.load(run_dir / "config.toml")
-        neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
-                               neat.DefaultStagnation, str(run_dir / "neat.cfg"))
-        net = neat.nn.FeedForwardNetwork.create(genome, neat_cfg)
-        graph = genome_graph(genome, neat_cfg)
-        watch = graph["hidden"] + graph["outputs"]
-        train.use_config(cfg.env)
-        env = train._get_env()
-        env.layout = input_layout(cfg.env)
-        env.death_map = death_map
-        layout = [{"name": nm, "kind": k} for nm, k in env.layout]
-        height = 224 * SCALE + BANNER
-        panel = NetworkPanel(graph, layout, env_view(cfg.env), height)
         self.status = f"{head.replace('LIVE  ', '')}  |  {note}"
-        obs, info = env.reset()
-        total, result = 0.0, ""
-        while True:
+        t0 = time.time()
+        for canvases in episode_frames(run_dir, genome, head, note, death_map):
+            self.publish(canvases[-1])
+            time.sleep(max(0.0, FRAME_SECONDS / self.speed - (time.time() - t0)))
             t0 = time.time()
+        time.sleep(1.0)
+
+
+def episode_frames(run_dir, genome, head, note, death_map, capture=False, max_steps=None):
+    """Play one episode of `genome` and yield, per step, the list of finished frames (game + caption + network). With capture=True
+    the list holds all four emulator frames of the step (smooth video); otherwise just the last one."""
+    cfg = config.load(run_dir / "config.toml")
+    neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
+                           neat.DefaultStagnation, str(run_dir / "neat.cfg"))
+    net = neat.nn.FeedForwardNetwork.create(genome, neat_cfg)
+    graph = genome_graph(genome, neat_cfg)
+    watch = graph["hidden"] + graph["outputs"]
+    train.use_config(cfg.env)
+    env = train._get_env()
+    env.layout = input_layout(cfg.env)
+    env.death_map = death_map
+    layout = [{"name": nm, "kind": k} for nm, k in env.layout]
+    height = 224 * SCALE + BANNER
+    panel = NetworkPanel(graph, layout, env_view(cfg.env), height)
+    obs, info = env.reset()
+    env.capture = [] if capture else None
+    total, result, steps = 0.0, "", 0
+    try:
+        while True:
             out = net.activate(obs.ravel().astype(np.float64))
             pressed = np.array(out) > 0.5
             vals = {k: float(net.values.get(k, 0.0)) for k in watch}
             side = panel.draw(obs.ravel(), vals, pressed)
+            before = len(env.capture) if capture else 0
             obs, reward, term, trunc, info = env.step(pressed)
             total += reward
-            if term or trunc:
-                result = "cleared" if info.get("cleared") else "died" if info.get("died") else "stuck" if trunc else ""
-            game = Image.fromarray(env.frame).resize((256 * SCALE, 224 * SCALE), Image.NEAREST)
-            left = Image.new("RGB", (game.width, height))
-            left.paste(game, (0, BANNER))
-            _caption(left, [head, f"{note}  x {info['x']}  reward {total:.0f}" + (f"   ({result})" if result else "")], None)
-            canvas = Image.new("RGB", (game.width + PANEL_W, height))
-            canvas.paste(left, (0, 0))
-            canvas.paste(side, (game.width, 0))
-            self.publish(canvas)
-            if term or trunc:
-                time.sleep(1.0)
+            steps += 1
+            cut = max_steps is not None and steps >= max_steps
+            if term or trunc or cut:
+                result = "cleared" if info.get("cleared") else "died" if info.get("died") else "stuck" if trunc else "cut off"
+            raw = env.capture[before:] if capture else [env.frame]
+            out_frames = []
+            for frame in raw:
+                game = Image.fromarray(frame).resize((256 * SCALE, 224 * SCALE), Image.NEAREST)
+                left = Image.new("RGB", (game.width, height))
+                left.paste(game, (0, BANNER))
+                _caption(left, [head, f"{note}  x {info['x']}  reward {total:.0f}" + (f"   ({result})" if result else "")], None)
+                canvas = Image.new("RGB", (game.width + PANEL_W, height))
+                canvas.paste(left, (0, 0))
+                canvas.paste(side, (game.width, 0))
+                out_frames.append(canvas)
+            yield out_frames
+            if term or trunc or cut:
                 return
-            time.sleep(max(0.0, FRAME_SECONDS / self.speed - (time.time() - t0)))
+    finally:
+        env.capture = None
 
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">

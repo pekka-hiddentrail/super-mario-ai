@@ -1,0 +1,56 @@
+# 5 generations that keep every population, for `smwai tour` (one random genome of each of the first 5 species per generation).
+# A lowish compatibility threshold and species of size 1 allowed, so that there are several species (1.0 gave a species per genome and crashed).
+# A training run just to be watched: Yoshi Island 1, the best setup so far (collect inputs, adaptive mutation), few workers so the 'proper'
+# runs keep the CPU. It saves its whole population every generation, so `smwai live` can show any genome of any species.
+# Start it with scripts/showcase.sh and open http://localhost:8767
+name = "tour-yi1"
+
+[env]
+levels = ["YoshiIsland1"]
+inputs = "collect"        # solid, enemy, item, coin grids + water, Yoshi, power-up
+frame_skip = 4
+radius = 6
+stuck_frames = 120
+max_frames = 20000
+
+[reward]
+progress = 1.0
+clear_bonus = 1000.0
+time_penalty = 0.0
+death_penalty = 0.0
+powerup_bonus = 0.0
+coin_bonus = 0.0
+
+[train]
+generations = 5
+workers = 12
+checkpoint_every = 5
+runs_dir = "runs"
+seed = 11
+
+[neat]
+pop_size = 60
+initial_connection = "partial_direct 0.05"
+conn_add_prob = 0.5
+conn_delete_prob = 0.2
+node_add_prob = 0.2
+node_delete_prob = 0.1
+weight_mutate_rate = 0.8
+weight_mutate_power = 0.5
+compatibility_threshold = 2.5
+min_species_size = 1
+max_stagnation = 15
+survival_threshold = 0.2
+elitism = 2
+
+[adapt]
+enabled = true            # after 3 generations without a gain of 20+ fitness, mutate harder until it improves
+stall_generations = 3
+min_improvement = 20.0
+power_factor = 2.0
+structure_factor = 1.5
+rate_add = 0.1
+
+[live]
+save_population = true
+save_history = true

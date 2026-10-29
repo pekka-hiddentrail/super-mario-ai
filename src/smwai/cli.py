@@ -46,6 +46,14 @@ def main(argv=None):
     lv.add_argument("--port", type=int, default=8767)
     lv.add_argument("--speed", type=float, default=1.0, help="playback speed, 1 = real time")
 
+    tr = sub.add_parser("tour", help="one video: a random genome of each of the first species of the first generations")
+    tr.add_argument("--run", required=True, help="run folder name (trained with [live] save_population and save_history)")
+    tr.add_argument("--runs-dir", default="runs")
+    tr.add_argument("--generations", type=int, default=5)
+    tr.add_argument("--species", type=int, default=5)
+    tr.add_argument("--seed", type=int, default=1)
+    tr.add_argument("--steps", type=int, default=450, help="longest episode shown, in steps of 4 frames")
+
     u = sub.add_parser("ui", help="start the Streamlit dashboard")
     u.add_argument("--port", type=int, default=8501)
     u.add_argument("--viewer-port", type=int, default=8765)
@@ -60,6 +68,10 @@ def main(argv=None):
         return subprocess.call([sys.executable, "-m", "streamlit", "run", str(app), "--server.port",
                                 str(args.port), "--server.headless", "true",
                                 "--browser.gatherUsageStats", "false"], env=env)
+    if args.cmd == "tour":
+        from .tour import make_tour
+        print("->", make_tour(Path(args.runs_dir) / args.run, args.generations, args.species, args.seed, args.steps))
+        return
     if args.cmd == "live":
         from .live import serve
         return serve(args.runs_dir, args.port, args.run, args.speed)

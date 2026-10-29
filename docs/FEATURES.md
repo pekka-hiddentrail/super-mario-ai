@@ -46,3 +46,10 @@ After changing code, restart the servers (`restart_ui.sh`): a running page does 
 - The jump model ignores walls, bounces and moving enemies (land/pit right 97%, landing within a tile 65%); some sprites that are not enemies count as enemies.
 - Room fingerprints (screen count + solid tile count) could collide for two different rooms; per-room progress only exists with `room_progress`.
 - PPO has no resume and an unstable evaluation. Experiments use 2-5 seeds, so they rank ideas, they do not prove them.
+
+## Live view (`smwai live`, `scripts/restart_live.sh`)
+http://localhost:8767 plays the newest saved best genome of the newest run (or `--run NAME`) in real time, with the network next to the game, and switches to each new generation (and each new run of an experiment) as it is saved. It is a replay of the best genome of each generation, not the training episodes themselves; it runs in its own process with its own emulator.
+
+## Video network panel
+Input windows that are tall or have many single values (`ride`, `run_options`, ...) no longer get cut off: the panel is laid out on a larger canvas and shrunk to fit.
+

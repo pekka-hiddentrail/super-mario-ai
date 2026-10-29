@@ -76,6 +76,8 @@ NEAT_DEFAULTS = dict(
     survival_threshold=0.2, elitism=2, min_species_size=2)
 
 
+RETIRED_REWARD = {"duck_penalty"}      # removed again (no benefit); runs that used it still open, but replay without it
+
 ADAPT_DEFAULTS = dict(
     enabled=False,          # adaptive mutation: mutate harder while the best fitness is stalled
     stall_generations=5,    # generations without a meaningful new best before boosting
@@ -158,7 +160,8 @@ def dump(raw):
 
 def load(path):
     raw = load_raw(path)
-    env = EnvConfig(**raw.get("env", {}), reward=RewardConfig(**raw.get("reward", {})))
+    reward = {k: v for k, v in raw.get("reward", {}).items() if k not in RETIRED_REWARD}
+    env = EnvConfig(**raw.get("env", {}), reward=RewardConfig(**reward))
     train = raw.get("train", {})
     return RunConfig(
         name=raw.get("name", "run"), env=env,

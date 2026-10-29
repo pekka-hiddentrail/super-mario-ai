@@ -40,6 +40,12 @@ def main(argv=None):
     v.add_argument("--runs-dir", default="runs")
     v.add_argument("--port", type=int, default=8765)
 
+    lv = sub.add_parser("live", help="watch training live: the newest best genome replayed in real time with its network")
+    lv.add_argument("--runs-dir", default="runs")
+    lv.add_argument("--run", help="follow this run only (default: the newest)")
+    lv.add_argument("--port", type=int, default=8767)
+    lv.add_argument("--speed", type=float, default=1.0, help="playback speed, 1 = real time")
+
     u = sub.add_parser("ui", help="start the Streamlit dashboard")
     u.add_argument("--port", type=int, default=8501)
     u.add_argument("--viewer-port", type=int, default=8765)
@@ -54,6 +60,9 @@ def main(argv=None):
         return subprocess.call([sys.executable, "-m", "streamlit", "run", str(app), "--server.port",
                                 str(args.port), "--server.headless", "true",
                                 "--browser.gatherUsageStats", "false"], env=env)
+    if args.cmd == "live":
+        from .live import serve
+        return serve(args.runs_dir, args.port, args.run, args.speed)
     if args.cmd == "view":
         from .viewer.server import serve
         return serve(args.runs_dir, args.port)

@@ -63,6 +63,13 @@ class NetworkPanel:
         grids = [item for item in layout if item["kind"] == "grid"]
         compact = any(":" in item["name"] for item in layout if item["kind"] == "scalar")
         self.cell = 14 if len(grids) == 1 else (4 if len(grids) >= 5 else 5) if compact else 9 if len(grids) <= 3 else 7
+        # everything is laid out on a canvas that is 1/zoom larger than the panel and shrunk at the end, so that tall input windows
+        # and many single values still fit
+        names = [item["name"] for item in layout if item["kind"] == "scalar"]
+        text_rows = (sum(1 for n in names if ":" not in n) + 3) // 4 + len({n.split(":")[0] for n in names if ":" in n}) if compact else 0
+        needed = 34 + len(grids) * (self.rows * self.cell + (16 if len(grids) > 1 else 0)) + 12 * text_rows + 16
+        self.zoom = min(1.0, height / needed) if compact else 1.0
+        self.lw, self.lh = PANEL_W / self.zoom, height / self.zoom
         self.pos, self.groups = {}, []
         idx, y, sx, scalars = 0, 34, 18, []
         for item in layout:
@@ -90,19 +97,21 @@ class NetworkPanel:
             for i, n in scalars:
                 if ":" in n:
                     rows_by_prefix.setdefault(n.split(":")[0], []).append((i, n.split(":")[1]))
+            label_w = 62 if any(len(p) > 4 for p in rows_by_prefix) else 44
             for r, (prefix, items) in enumerate(rows_by_prefix.items()):
                 self.groups.append(("label", prefix, 0, 10, y + r * 12))
                 for k, (i, field) in enumerate(items):
-                    self._text_item(i, field, 44 + k * 76, y + r * 12)
+                    self._text_item(i, field, label_w + k * 76, y + r * 12)
         cols = {}
         for h in graph["hidden"]:
             cols.setdefault(graph["layer"][str(h)], []).append(h)
         top = max(list(cols) + [1]) + 1
         for layer, nodes in cols.items():
             for i, h in enumerate(nodes):
-                self.pos[h] = (200 + (layer - 1) * (210 / max(1, top - 1)), 50 + (i + 0.5) * (height - 100) / len(nodes))
+                self.pos[h] = ((200 + (layer - 1) * (210 / max(1, top - 1))) / PANEL_W * self.lw,
+                               50 + (i + 0.5) * (self.lh - 100) / len(nodes))
         for i, o in enumerate(graph["outputs"]):
-            self.pos[o] = (480, 56 + (i + 0.5) * (height - 110) / len(graph["outputs"]))
+            self.pos[o] = (480 / PANEL_W * self.lw, 56 + (i + 0.5) * (self.lh - 110) / len(graph["outputs"]))
 
     def _text_item(self, input_index, label, x, y):
         key = self.graph["inputs"][input_index]
@@ -111,7 +120,7 @@ class NetworkPanel:
 
     def draw(self, obs, vals, pressed):
         g, cell = self.graph, self.cell
-        img = Image.new("RGB", (PANEL_W, self.height), BG)
+        img = Image.new("RGB", (int(self.lw), int(self.lh)), BG)
         d = ImageDraw.Draw(img)
         small, mid = ImageFont.load_default(size=11), ImageFont.load_default(size=13)
         value = dict(zip(g["inputs"], (int(v) for v in obs)))
@@ -165,7 +174,7 @@ class NetworkPanel:
             d.ellipse([x - 7, y - 7, x + 7, y + 7], fill=ACCENT if on else _mix(TEXT, 0.15 + 0.6 * v),
                       outline=ACCENT if on else MUTED, width=3 if on else 2)
             d.text((x + 13, y - 7), BUTTONS[i], fill=ACCENT if on else MUTED, font=mid)
-        return img
+        return img if self.zoom == 1.0 else img.resize((PANEL_W, self.height), Image.LANCZOS)
 
 
 def _play_network(run_dir, generation, env):

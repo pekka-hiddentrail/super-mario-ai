@@ -1,0 +1,36 @@
+# More seeds (3-5) of rooms_pipes.toml (seeds 1-2 were run first). Same as explore_pipes.toml (explore inputs, pipe bonus 100000, adaptive mutation) plus
+# room_progress: each room (main level, bonus room) has its own 'furthest x', so walking through the bonus room pays progress
+# and the run is no longer stuck there. Compare with the `explore-pipes` runs, where every pipe-taker froze in the bonus room.
+# Run: smwai experiment --spec configs/experiments/rooms_pipes.toml ; then scripts/count_events.py "exp-rooms-pipes-*"
+name = "rooms-pipes-more"
+base = "configs/yi3.toml"
+seeds = [3, 4, 5]
+generations = 12
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "yi2-rooms"
+[variant.env]
+levels = ["YoshiIsland2"]
+inputs = "explore"
+room_progress = true
+[variant.reward]
+pipe_bonus = 100000.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "yi4-rooms"
+[variant.env]
+levels = ["YoshiIsland4"]
+inputs = "explore"
+room_progress = true
+[variant.reward]
+pipe_bonus = 100000.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

@@ -42,7 +42,7 @@ def _clip(v, lo, hi):
     return int(max(lo, min(hi, round(v))))
 
 
-def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=False):
+def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=False, moving=None):
     """One jump option. ceilings=True: rising into a solid tile or platform block bumps the head (the rise stops), so a jump from
     below a platform no longer 'lands on top of it'."""
     cx0, feet0 = state.x + 8, state.y + FEET
@@ -50,6 +50,8 @@ def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=Fal
     vy, dy = vy0, 0.0
     cx = cx0
     for t in range(100):
+        if moving:
+            blocks = moving[min(t + 1, len(moving) - 1)]           # where the platforms will be during this frame
         if walls:                                              # running into a solid tile at body height stops the sideways motion
             nxt = cx + state.x_speed / 16
             if state.x_speed and R.solid_at(ram, nxt + (7 if state.x_speed > 0 else -7), feet0 + dy - 16):
@@ -78,13 +80,15 @@ def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=Fal
     return [-1, hit, min(len(coins), 3), 0, 0]
 
 
-def _walk(ram, state, enemies, blocks, walls):
+def _walk(ram, state, enemies, blocks, walls, moving=None):
     """Keep running right without jumping: where does Mario end up after WALK_FRAMES? Same five values as a jump option."""
     speed = max(abs(state.x_speed), 24)
     cx0, feet0 = state.x + 8, state.y + FEET
     cx, feet, vy = cx0, float(feet0), 0.0
     coins, hit = set(), 0
-    for _ in range(WALK_FRAMES):
+    for t in range(WALK_FRAMES):
+        if moving:
+            blocks = moving[min(t + 1, len(moving) - 1)]
         nxt = cx + speed / 16
         if walls and R.solid_at(ram, nxt + 7, feet - 16):
             nxt = cx                                           # a wall: Mario stands still against it
@@ -106,16 +110,22 @@ def _walk(ram, state, enemies, blocks, walls):
     return [1, hit, min(len(coins), 3), _clip((cx - cx0) / 16, -15, 15), _clip((feet - feet0) / 16, -8, 8)]
 
 
-def run_features(ram, state, ride=False, ceilings=False, fixed=False):
+def _moving(state, ride, predict):
+    """Platform blocks for each of the next 100 frames (index 0 = now), or None when platforms are taken as they are now."""
+    return [R.platform_blocks(state, t) for t in range(101)] if ride and predict else None
+
+
+def run_features(ram, state, ride=False, ceilings=False, fixed=False, predict=False):
     """35 values in the order of run_names(): the 'keep running' option, then the jump options as if Mario ran at full speed
     (what a run-up would make possible)."""
     enemies, blocks = _scene(state, ride, fixed)
-    out = _walk(ram, state, enemies, blocks, fixed)
+    moving = _moving(state, ride, predict)
+    out = _walk(ram, state, enemies, blocks, fixed, moving)
     fast = dataclasses.replace(state, x_speed=RUN_SPEED)
     for button in BUTTONS_MODELLED:
         for hold in HOLDS:
             vy0 = state.y_speed if state.in_air else physics.takeoff_for(button, RUN_SPEED)
-            out += _option(ram, fast, vy0, hold, enemies, blocks, ceilings, walls=fixed)
+            out += _option(ram, fast, vy0, hold, enemies, blocks, ceilings, walls=fixed, moving=moving)
     return np.array(out, dtype=np.int8)
 
 
@@ -125,14 +135,15 @@ def _scene(state, ride, fixed):
     return enemies, (R.platform_blocks(state) if ride else ())
 
 
-def features(ram, state, ride=False, ceilings=False, fixed=False):
+def features(ram, state, ride=False, ceilings=False, fixed=False, predict=False):
     """The 30 jump-option values, in the order of names(). ride=True: moving platforms are ground, not enemies."""
     enemies, blocks = _scene(state, ride, fixed)
+    moving = _moving(state, ride, predict)
     out = []
     for button in BUTTONS_MODELLED:
         for hold in HOLDS:
             vy0 = state.y_speed if state.in_air else physics.takeoff_for(button, state.x_speed)
-            out += _option(ram, state, vy0, hold, enemies, blocks, ceilings, walls=fixed)
+            out += _option(ram, state, vy0, hold, enemies, blocks, ceilings, walls=fixed, moving=moving)
     return np.array(out, dtype=np.int8)
 
 

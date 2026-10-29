@@ -199,3 +199,18 @@ def test_run_features_see_a_pit_ahead_and_the_run_up(monkeypatch):
     out = J.run_features(None, st, fixed=True).reshape(7, 5)
     assert len(J.run_names()) == 35
     assert out[0][0] == -1                                                # running on falls into the pit
+
+
+def test_platforms_are_predicted_forward():
+    sw = R.Sprite(x=100, y=200, number=R.SWING_SPRITE, is_item=False, slot=0, vx=1.5, vy=-0.5)
+    br = R.Sprite(x=300, y=200, number=R.BRIDGE_SPRITE, is_item=False, slot=1, ext=24, dext=1.0)
+    st = type("S", (), {"sprites": [sw, br], "x": 90, "y": 220})()
+    assert (100, 200) in R.platform_blocks(st) and (300 + 24, 200) in R.platform_blocks(st)
+    later = R.platform_blocks(st, 10)
+    assert (115.0, 195.0) in later                                       # swing: constant velocity
+    assert (300 + 32, 200) in later                                      # bridge: ext 24 reaches 32 after 8 frames and rests there
+    assert R.bridge_ext(R.Sprite(x=0, y=0, number=R.BRIDGE_SPRITE, is_item=False, ext=32, timer=5), 5 + 10) == 22   # rests, then retracts
+    assert R.nearest_platform(st) == (10, -20, 1.5, -0.5)
+    sprites = [R.Sprite(x=110, y=190, number=R.SWING_SPRITE, is_item=False, slot=0)]
+    R.annotate_motion([R.Sprite(x=100, y=200, number=R.SWING_SPRITE, is_item=False, slot=0)], sprites, 4)
+    assert (sprites[0].vx, sprites[0].vy) == (2.5, -2.5)

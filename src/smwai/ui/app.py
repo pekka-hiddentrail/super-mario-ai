@@ -113,6 +113,9 @@ def param_inputs(raw, prefix):
             raw["env"]["run_options"] = st.checkbox(
                 "Jump inputs: keep running + jumps from full run speed", value=bool(raw["env"].get("run_options", False)),
                 key=prefix + "runopt", help="35 more inputs: what running on would do, and what the jumps would do after a run-up.")
+            raw["env"]["predict_platforms"] = st.checkbox(
+                "Jump inputs: predict moving platforms", value=bool(raw["env"].get("predict_platforms", False)),
+                key=prefix + "predplat", help="The jump options use where bridges will be during the jump, and four inputs describe the nearest platform.")
             raw["env"]["cancel_opposites"] = st.checkbox(
                 "Left+right and up+down cancel each other", value=bool(raw["env"].get("cancel_opposites", False)),
                 key=prefix + "cancel", help="Pressing both buttons of a pair presses neither.")

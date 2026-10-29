@@ -74,6 +74,10 @@ class Sprite:
     kind: str = "enemy"     # enemy | item | neutral (e.g. Yoshi) | other (extended sprites)
     slot: int = -1
     ext: int = 0            # turn-block bridge: how far the blocks have moved out from the middle one (pixels)
+    vx: float = 0.0         # pixels per frame since the previous step (set by the env; 0 when unknown)
+    vy: float = 0.0
+    dext: float = 0.0       # bridge: change of ext per frame
+    timer: int = 0          # bridge: frames left of the pause at the end of a stroke ($1540)
 
 
 @dataclass
@@ -113,7 +117,8 @@ def read_sprites(ram):
             y=u8(ram, SPRITE_Y_LO + slot) | u8(ram, SPRITE_Y_HI + slot) << 8,
             number=number, is_item=number in POWERUP_SPRITES,
             kind="item" if number in POWERUP_SPRITES else "neutral" if number in NEUTRAL_SPRITES else "enemy",
-            slot=slot, ext=u8(ram, 0x151C + slot) if number == BRIDGE_SPRITE else 0))
+            slot=slot, ext=u8(ram, 0x151C + slot) if number == BRIDGE_SPRITE else 0,
+            timer=u8(ram, 0x1540 + slot) if number == BRIDGE_SPRITE else 0))
     for slot in range(N_SPRITES):
         if u8(ram, EXT_NUMBER + slot) == 0:
             continue
@@ -277,17 +282,65 @@ def room_signature(ram):
     return (u8(ram, 0x5D), int(np.count_nonzero(ram[MAP16_HIGH:MAP16_HIGH + n] == 1)))
 
 
-def platform_blocks(state):
+def annotate_motion(prev_sprites, sprites, frames):
+    """Fill in vx, vy, dext of each sprite from where the same slot was `frames` emulator frames ago."""
+    old = {(s.slot, s.number): s for s in prev_sprites if s.slot >= 0}
+    for s in sprites:
+        o = old.get((s.slot, s.number))
+        if o is not None and s.slot >= 0:
+            s.vx, s.vy, s.dext = (s.x - o.x) / frames, (s.y - o.y) / frames, (s.ext - o.ext) / frames
+
+
+BRIDGE_PAUSE = 60          # frames the bridge rests at the end of a stroke (measured at full extension: $1540 counts 60 down to 0)
+
+
+def bridge_ext(sp, t):
+    """The bridge's ext `t` frames from now: moves one pixel per frame between 0 and 32 and rests BRIDGE_PAUSE frames at each end
+    (seen: it extends 1 px/frame, rests 60 frames fully out; the way back is assumed to mirror that)."""
+    ext, d, wait = float(sp.ext), (1 if sp.dext > 0 else -1 if sp.dext < 0 else 0), sp.timer
+    for _ in range(int(t)):
+        if wait > 0:
+            wait -= 1
+        elif d == 0:
+            d = -1 if ext >= 16 else 1
+            ext += d
+        else:
+            ext += d
+            if ext >= 32 or ext <= 0:
+                ext, wait = min(32.0, max(0.0, ext)), BRIDGE_PAUSE
+                d = -d
+    return ext
+
+
+def platform_blocks(state, t=0):
+    """Solid 16x16 blocks (world x, y of the top-left corner) that belong to moving platforms, `t` frames from now when t > 0
+    (bridge: bridge_ext; swing: constant velocity, which is zero until Mario stands on it). t = 0 is the present.
+    Bridge: the middle block plus one pair at +-ext/2 and one pair at +-ext. Swing: one block at the sprite position."""
     """Solid 16x16 blocks (world x, y of the top-left corner) that belong to moving platforms right now.
     Bridge: the middle block plus one pair at +-ext/2 and one pair at +-ext. Swing: one block at the sprite position."""
     blocks = []
     for sp in state.sprites:
         if sp.number == BRIDGE_SPRITE:
-            for off in {0, sp.ext // 2, -(sp.ext // 2), sp.ext, -sp.ext}:
+            ext = int(bridge_ext(sp, t)) if t else sp.ext
+            for off in {0, ext // 2, -(ext // 2), ext, -ext}:
                 blocks.append((sp.x + off, sp.y))
         elif sp.number == SWING_SPRITE:
-            blocks.append((sp.x, sp.y))
+            blocks.append((sp.x + sp.vx * t, sp.y + sp.vy * t))
     return blocks
+
+
+def nearest_platform(state):
+    """(dx, dy, vx, vy) of the platform sprite nearest to Mario, in pixels and pixels per frame; None when there is none."""
+    best = None
+    for sp in state.sprites:
+        if sp.number in PLATFORM_SPRITES:
+            d = abs(sp.x - state.x) + abs(sp.y - state.y)
+            if best is None or d < best[0]:
+                best = (d, sp)
+    if best is None:
+        return None
+    sp = best[1]
+    return sp.x - state.x, sp.y - state.y, sp.vx, sp.vy
 
 
 def platform_grid(state, view=6):

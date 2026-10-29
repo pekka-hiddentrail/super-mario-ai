@@ -47,6 +47,7 @@ class EnvConfig:
     jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
                                    # values stay as they were at takeoff while Mario is in the air
     run_options: bool = False      # + 'keep running' and the jump options as from full run speed (jumpview.run_names): 35 inputs
+    predict_platforms: bool = False  # jump options use where moving platforms will be during the arc; + 4 inputs about the nearest platform
     cancel_opposites: bool = False  # LEFT+RIGHT cancel each other, and so do UP+DOWN (networks otherwise hold both most of the time)
     room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
@@ -68,9 +69,23 @@ def view(cfg):
     return R.window(cfg.window if cfg.window else cfg.radius)
 
 
+PLATFORM_INPUTS = ("plat_dx", "plat_dy", "plat_vx", "plat_vy")
+
+
+def platform_inputs(state):
+    """Nearest moving platform: position relative to Mario in tiles, speed in 1/8 pixel per frame (all 0 when there is none)."""
+    p = R.nearest_platform(state)
+    if p is None:
+        return np.zeros(4, dtype=np.int8)
+    dx, dy, vx, vy = p
+    clip = lambda v: int(max(-16, min(16, round(v))))
+    return np.array([clip(dx / 16), clip(dy / 16), clip(vx * 8), clip(vy * 8)], dtype=np.int8)
+
+
 def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
     return (_base_layout(cfg) + ([(name, "scalar") for name in jumpview.run_names()] if cfg.run_options else [])
+            + ([(name, "scalar") for name in PLATFORM_INPUTS] if cfg.predict_platforms else [])
             + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else []))
 
 
@@ -109,10 +124,12 @@ def build_observation(ram, state, cfg, deaths=None, memory=None):
             extra = memory["run"]
         else:
             extra = jumpview.run_features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2",
-                                          fixed=cfg.jump_fixes)
+                                          fixed=cfg.jump_fixes, predict=cfg.predict_platforms)
             if memory is not None:
                 memory["run"] = extra
         obs = np.concatenate([obs, extra])
+    if cfg.predict_platforms:
+        obs = np.concatenate([obs, platform_inputs(state)])
     if cfg.death_inputs:
         obs = np.concatenate([obs, np.array(deathmap.features(deaths, state.x), dtype=np.int8)])
     return obs
@@ -137,7 +154,7 @@ def _base_observation(ram, state, cfg, memory=None):
                 parts.append(memory["jump"])                    # in the air the jump is under way: keep what the takeoff predicted
             else:
                 jumps = jumpview.features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2",
-                                          fixed=cfg.jump_fixes)
+                                          fixed=cfg.jump_fixes, predict=cfg.predict_platforms)
                 if memory is not None:
                     memory["jump"] = jumps
                 parts.append(jumps)
@@ -179,9 +196,11 @@ class SmwEnv(gym.Env):
         names = list(self._env.buttons)
         self._pad = [names.index(b) for b in BUTTONS]
 
-    def _read(self):
+    def _read(self, prev=None):
         ram = R.wram(self._env.unwrapped.get_ram())
         st = R.read_state(ram)
+        if prev is not None:
+            R.annotate_motion(prev.sprites, st.sprites, self.cfg.frame_skip)      # platform speeds from the last step
         return st, build_observation(ram, st, self.cfg, self.death_map, self._memory)
 
     def reset(self, seed=None, options=None):
@@ -221,7 +240,7 @@ class SmwEnv(gym.Env):
             self.frames += 1
             if self.capture is not None:          # video recording: keep every emulator frame
                 self.capture.append(self.frame.copy())
-        self.state, grid = self._read()
+        self.state, grid = self._read(prev)
         self._track_room(prev)
         rc = self.cfg.reward
         reward = -rc.time_penalty * self.cfg.frame_skip

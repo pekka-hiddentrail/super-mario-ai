@@ -112,6 +112,15 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   x 3876 (best fitness 104,318), seed 1 does not. Videos: `exp-rooms-pipes-yi2-rooms-s2` (gen 8) and `exp-rooms-pipes-yi4-rooms-s1` (gen 6).
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
+## Yoshi's Island 3: what is known (not solved)
+- Every run of every variant stalls at x ~540-550 (12 of 12). Terrain: a short ground stretch, then two gaps (5 and 8 tiles) and a solid wall
+  10 tiles tall at x 528-640 whose top (tile row 16) is 8 tiles above the ground; the tiles inside such structures are scenery, Mario walks through them.
+- Frames at the stall show Mario falling through an open chasm whose floor is drawn as dotted outline blocks (probably switch-palace outline blocks,
+  not solid without the switch) and a ledge on the far side that is higher than his takeoff. A moving sprite (`0x5F`, a chain-hung block) swings over
+  the chasm; it is currently classed as an "enemy", so the network treats it as something to avoid. Whether it carries Mario across is not verified.
+- A two-stage search from saved states (scripts/probe_platform.py) found no safe landing at all, so the intended route is still unknown.
+  Playing the section by hand (`scripts/play_manual.ps1 --state YoshiIsland3`) is the quickest way to find it.
+
 ## Known limits
 - **Dead ends** (observed by the user): on Yoshi's Island 4, running past the sideways pipe entrance at x ~2723 leaves Mario stuck in the tunnel
   for good, which is why every run without a pipe reward ends at x ~2793. The run only ends through the 120-frame no-progress cut-off.

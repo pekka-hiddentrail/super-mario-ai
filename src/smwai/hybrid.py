@@ -233,7 +233,7 @@ class HybridEvaluator(PoolEvaluator):
             before = genome.fitness
             refined = copy.deepcopy(genome)
             self._refine(refined, config)
-            fitness, frames = self.pool.apply_async(eval_genome_full, (refined, config)).get() if self.pool is not None \
+            fitness, frames, behaviour = self.pool.apply_async(eval_genome_full, (refined, config)).get() if self.pool is not None \
                 else eval_genome_full(refined, config)
             self.stats["frames"] += frames
             accepted = fitness > before + 1e-6
@@ -243,6 +243,7 @@ class HybridEvaluator(PoolEvaluator):
                 for k, nd in refined.nodes.items():
                     genome.nodes[k].bias = nd.bias
                 genome.fitness = fitness
+                self.stats.setdefault("behaviour", {})[gid] = behaviour
             report.append({"genome": gid, "before": round(before, 1), "after": round(fitness, 1), "accepted": accepted})
         line = ", ".join(f"{r['before']:.0f}->{r['after']:.0f}{'*' if r['accepted'] else ''}" for r in report)
         print(f"   hybrid: PPO refined {len(report)} genomes in {time.time() - t0:.0f}s: {line}   (* = kept)", flush=True)

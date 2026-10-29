@@ -9,8 +9,9 @@ from pathlib import Path
 import neat
 import numpy as np
 
-from . import neat_params
+from . import neat_params, novelty
 from .env import BUTTONS, SmwEnv
+from .novelty import blend
 
 _ENV_CFG = None   # set before the worker pool forks
 _ENV = None       # one emulator per process (stable-retro allows only one)
@@ -45,16 +46,19 @@ def run_episode(genome, config, record=False):
     net = neat.nn.FeedForwardNetwork.create(genome, config)
     obs, info = env.reset()
     total, actions, path = 0.0, [], [[info["x"], info["y"]]]
+    cells = {novelty.cell_id(info["x"], info["y"])}
     while True:
         action = np.array(net.activate(obs.ravel().astype(np.float64))) > 0.5
         if record:
             actions.append(_to_mask(action))
         obs, reward, term, trunc, info = env.step(action)
         total += reward
+        cells.add(novelty.cell_id(info["x"], info["y"]))
         if record:
             path.append([info["x"], info["y"]])
         if term or trunc:
             info["path"] = path
+            info["cells"] = cells
             return total, actions, info
 
 
@@ -78,9 +82,10 @@ def eval_genome(genome, config):
 
 
 def eval_genome_full(genome, config):
-    """(fitness, emulator frames used) so experiments can compare methods per frame of experience."""
+    """(fitness, emulator frames used, behaviour) so experiments can compare methods per frame of experience."""
     total, _, info = run_episode(genome, config)
-    return total, info["frames"]
+    return total, info["frames"], {"print": novelty.fingerprint(info["cells"], info.get("events", [])),
+                                   "end": [info["x"], info["y"], bool(info.get("cleared"))]}
 
 
 class PoolEvaluator:
@@ -97,9 +102,10 @@ class PoolEvaluator:
             results = [j.get() for j in jobs]
         else:
             results = [eval_genome_full(g, config) for _, g in genomes]
-        for (_, genome), (fitness, _frames) in zip(genomes, results):
+        for (_, genome), (fitness, _frames, _behaviour) in zip(genomes, results):
             genome.fitness = fitness
-        self.stats["frames"] = sum(frames for _, frames in results)
+        self.stats["frames"] = sum(r[1] for r in results)
+        self.stats["behaviour"] = {gid: r[2] for (gid, _), r in zip(genomes, results)}
 
     def close(self):
         if self.pool is not None:
@@ -109,10 +115,12 @@ class PoolEvaluator:
 class RunReporter(neat.reporting.BaseReporter):
     """Writes metrics.csv and records the best run of every generation."""
 
-    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None):
+    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None, novelty_cfg=None):
         self.dir = Path(run_dir)
         self.neat_cfg = neat_cfg
         self.adapt = adapt or {}
+        self.nov = novelty_cfg or {}
+        self.archive = novelty.NoveltyArchive(self.nov.get("k", 5), self.nov.get("archive_max", 300), self.nov.get("add_per_gen", 3))
         self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
         self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
         (self.dir / "best").mkdir(parents=True, exist_ok=True)
@@ -189,8 +197,30 @@ class RunReporter(neat.reporting.BaseReporter):
         with open(self.csv, "a") as f:
             f.write(row + "\n")
         flag = "" if deterministic else "  (replay differs!)"
+        extra = self._novelty(population, best)
         print(f"gen {self.generation:4d}  best {best.fitness:8.1f}  mean {np.mean(fits):8.1f}  "
-              f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}", flush=True)
+              f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}{extra}", flush=True)
+
+    def _novelty(self, population, best):
+        """Score the generation's behaviour novelty and map coverage; with weight > 0 also turn fitness into the selection score."""
+        behaviour = self.stats.get("behaviour")
+        if not self.nov.get("enabled") or not behaviour:
+            return ""
+        prints = {gid: b["print"] for gid, b in behaviour.items() if gid in population}
+        scores = self.archive.score(prints)
+        raw = {gid: g.fitness for gid, g in population.items() if gid in scores}
+        new_cells = self.archive.update(prints, scores)
+        best_id = max(raw, key=raw.get)
+        row = {"generation": self.generation, "novelty_mean": round(float(np.mean(list(scores.values()))), 3),
+               "novelty_max": round(max(scores.values()), 3), "novelty_of_best": round(scores[best_id], 3),
+               "coverage": len(self.archive.seen), "new_cells": new_cells, "archive": len(self.archive.prints)}
+        with open(self.dir / "novelty.jsonl", "a") as f:
+            f.write(json.dumps(row) + "\n")
+        weight = self.nov.get("weight", 0.0)
+        if weight > 0:                                   # selection now rewards being different as well as getting far
+            for gid, score in blend(raw, scores, weight).items():
+                population[gid].fitness = score
+        return f"  novelty {row['novelty_mean']:.2f}  cells {row['coverage']} (+{new_cells})"
 
 
 def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers=None):
@@ -217,7 +247,7 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
         evaluator = HybridEvaluator(n_workers, stats, cfg.env, cfg.hybrid, run_dir / "hybrid.jsonl")
     else:
         evaluator = PoolEvaluator(n_workers, stats)
-    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt))
+    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty))
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:

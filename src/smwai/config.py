@@ -99,6 +99,11 @@ HYBRID_DEFAULTS = dict(
     lr=0.003,               # learning rate on the genome's weights and biases
     critic_lr=0.001, explore_eps=0.05, reward_scale=0.01)
 
+NOVELTY_DEFAULTS = dict(
+    enabled=True,           # measure behaviour novelty and map coverage each generation (novelty.jsonl); costs next to nothing
+    weight=0.0,             # share of novelty in the selection score (0: record only; 0.3: 70% fitness, 30% novelty)
+    k=5, archive_max=300, add_per_gen=3)
+
 PPO_DEFAULTS = dict(
     total_steps=500_000, n_envs=8, n_steps=256, batch_size=512, n_epochs=4, learning_rate=3e-4,
     gamma=0.99, ent_coef=0.01, clip_range=0.2, reward_scale=0.01, eval_every=20_480,
@@ -118,6 +123,7 @@ class RunConfig:
     ppo: dict = None
     adapt: dict = None
     hybrid: dict = None
+    novelty: dict = None
 
     @property
     def n_inputs(self):
@@ -160,4 +166,4 @@ def load(path):
         checkpoint_every=train.get("checkpoint_every", 5), runs_dir=train.get("runs_dir", "runs"),
         neat={**NEAT_DEFAULTS, **raw.get("neat", {})}, seed=train.get("seed"),
         ppo={**PPO_DEFAULTS, **raw.get("ppo", {})}, adapt={**ADAPT_DEFAULTS, **raw.get("adapt", {})},
-        hybrid={**HYBRID_DEFAULTS, **raw.get("hybrid", {})})
+        hybrid={**HYBRID_DEFAULTS, **raw.get("hybrid", {})}, novelty={**NOVELTY_DEFAULTS, **raw.get("novelty", {})})

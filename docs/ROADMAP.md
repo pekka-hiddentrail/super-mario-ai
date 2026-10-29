@@ -118,10 +118,17 @@ you stand on it, and jump off before it swings too low; then a row of five block
 bridge**, sprite `0x5A`): solid, but they can move from under you. Memory facts: the bridge's extension is table `$151C` (0 = one block, 32 = five
 blocks, x from anchor-32 to anchor+32+16, y = anchor y), cycling every ~100 frames; the swinging block is sprite `0x5F` (position = the block).
 Before the `ride` input mode both counted as enemies and neither as ground, and all 12 earlier runs stalled at x ~549.
-`ride` (explore + a platform channel + landing on platforms in the jump model) was tested in `configs/experiments/ride_yi3.toml` (3 seeds, 15 generations,
+Repeat with six more seeds (20 generations): 3 of 6 passed x 700 (best x 1143, 1202, 782; the others stayed near 520); with the first test that is 4 of 9
+seeds on the high route, none cleared. `ride` (explore + a platform channel + landing on platforms in the jump model) was tested in `configs/experiments/ride_yi3.toml` (3 seeds, 15 generations,
 population 60, adaptive mutation): `explore` mean best x 540, `ride` 540 (no change), `ride` + climb bonus 721: one seed (s1) went well past the old stall
 to x 1149 along a high route (4 climbs, up to y 36), the other two did not move. So the climb incentive helped once; platform perception alone did not.
 The saved state `states/manual_*.state` is raw (not loadable as a retro state); it is for analysis only, training always starts at the level start.
+
+## Special moves (user notes)
+- Running and pressing DOWN makes Mario slide (ducking pose, keeps momentum, smaller hitbox). Flying with the cape and riding Yoshi are special moves too.
+- Measured in the best runs so far (`scripts/count_moves.py`): sliding 0-5% of steps (DOWN held 0-39%), riding Yoshi 0%, cape 0%, flying 0%. The agents do not
+  use them yet; the jump model and the inputs know nothing about them (only `on_yoshi` and the power-up state are inputs; no ducking or flight flag; a jump
+  from a slide or with a cape is not modelled). Candidate for the next observation version: ducking flag, flight flag, cape power-up; later Yoshi's own moves.
 
 ## Known limits
 - **Dead ends** (observed by the user): on Yoshi's Island 4, running past the sideways pipe entrance at x ~2723 leaves Mario stuck in the tunnel

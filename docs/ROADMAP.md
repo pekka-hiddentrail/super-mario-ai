@@ -99,6 +99,12 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
   x ~2723 (the way on); seed 1 took an earlier pipe near x ~810 and then never progressed (best x 811 / 809), because 100000 for one pipe beats
   any amount of progress. So sideways pipes are found by running into them, downward pipes (which need DOWN) were not found on Yoshi's Island 2.
   Lesson: a very large bonus can trap a run in a bonus room; progress inside the new room (per-room max x) is still unrewarded.
+- **Seeing pipes helps for the downward pipe** (`explore` inputs = physics + pipe channel, pipe bonus 100000, 2 seeds, 12 generations):
+  Yoshi's Island 2: seed 2 entered the pipe at x 3883 (5 of 12 generations), seed 1 did not; without the channel 0 of 3 pipe runs did.
+  Yoshi's Island 4: both seeds took the early pipe near x 810 and stayed in the bonus room (best x 809 / 811) instead of the sideways pipe at
+  x 2723. In every pipe-taking run the agent froze in the bonus room (x ~24) until the attempt timed out, so it forfeited the level clear.
+  Fix built: `room_progress = true` (each room has its own furthest x, rooms fingerprinted by screen count and solid-tile count);
+  test `configs/experiments/rooms_pipes.toml`.
 - Experiments are small (2-3 seeds, 14 generations): they rank ideas, they do not prove them.
 
 ## Known limits

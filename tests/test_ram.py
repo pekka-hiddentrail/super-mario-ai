@@ -159,3 +159,16 @@ def test_pipe_and_room_fields():
     w[R.PIPE_TIMER], w[R.PIPE_ACTION], w[R.ROOMS] = 30, R.PIPE_DOWN, 2
     st = R.read_state(w)
     assert (st.pipe_timer, st.pipe_action, st.rooms) == (30, 3, 2)
+
+
+def test_room_signature_ignores_block_hits_and_coins():
+    w = make_wram()
+    w[0x5D] = 3
+    for i in range(50):
+        w[R.MAP16_HIGH + i] = 1
+    base = R.room_signature(w)
+    w[R.MAP16_LOW + 5] = R.COIN_TILE          # a coin tile appears or vanishes
+    w[R.MAP16_LOW + 7] = R.USED_BLOCK         # a box turns into a used block (still solid)
+    assert R.room_signature(w) == base
+    w[R.MAP16_HIGH + 60] = 1                  # a different room has different geometry
+    assert R.room_signature(w) != base

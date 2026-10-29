@@ -56,3 +56,25 @@ def test_sideways_pipe_on_yoshi_island_4_pays_once():
     pipes = [e for e in env.events if e[1] == "pipe"]
     assert len(pipes) <= 1
     assert sum(r > 50000 for r in rewards) == len(pipes)
+
+
+def test_room_progress_pays_progress_inside_the_bonus_room():
+    env = SmwEnv(EnvConfig(levels=["YoshiIsland2"], stuck_frames=600, room_progress=True,
+                           reward=RewardConfig(pipe_bonus=100000.0)))
+    env.reset()
+    after_pipe, entered = 0.0, False
+    for t in range(1200):
+        a = np.zeros(len(BUTTONS), dtype=bool)
+        in_main = env.state.rooms == 0 and t < 700
+        a[BUTTONS.index("RIGHT")] = a[BUTTONS.index("Y")] = (t % 40) < 34 if in_main else True
+        a[BUTTONS.index("B")] = (t % 14) < 3
+        a[BUTTONS.index("DOWN")] = (t % 5) < 2 if in_main else False
+        _, r, term, trunc, info = env.step(a)
+        entered = entered or any(e[1] == "pipe" for e in env.events)
+        if entered and r < 50000:
+            after_pipe += r
+        if term or trunc:
+            break
+    assert entered
+    assert after_pipe > 100                         # walking right in the bonus room counts again
+    assert info["max_x"] >= 3878                    # the reported furthest x stays the main level's

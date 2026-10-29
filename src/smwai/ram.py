@@ -257,3 +257,10 @@ def coin_at(ram, px, py):
     off = _tile_offset(px, py)
     return (off is not None and MAP16_HIGH + off < len(ram)
             and ram[MAP16_LOW + off] == COIN_TILE and ram[MAP16_HIGH + off] == 0)
+
+
+def room_signature(ram):
+    """A fingerprint of the room that is loaded: screen count and number of solid tiles. Hitting blocks (still solid) and
+    taking coins do not change it, so coming back to a room gives the same value."""
+    n = u8(ram, 0x5D) * TILES_PER_PAGE
+    return (u8(ram, 0x5D), int(np.count_nonzero(ram[MAP16_HIGH:MAP16_HIGH + n] == 1)))

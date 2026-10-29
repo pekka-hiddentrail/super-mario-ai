@@ -42,6 +42,7 @@ class EnvConfig:
     radius: int = 6                # view: this many tiles every way around Mario ...
     window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
     inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options | explore: + pipes
+    room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -111,6 +112,7 @@ class SmwEnv(gym.Env):
         self.events = []
         self.best_ground_y = 0
         self._pipes = set()
+        self.room_max, self.room_sig, self._room_pending = {}, None, False
 
     def _open(self, level):
         import stable_retro as retro  # Linux/WSL only; imported lazily so config/tests work anywhere
@@ -144,12 +146,13 @@ class SmwEnv(gym.Env):
         self.events = []
         self.best_ground_y = self.state.y        # highest standing position so far (smallest y)
         self._pipes = set()
+        self.room_max, self.room_sig, self._room_pending = {}, None, False
         if self.capture is not None:
             self.capture.append(self.frame.copy())
         return grid, self._info()
 
     def _info(self):
-        return {"x": self.state.x, "y": self.state.y, "max_x": self.max_x,
+        return {"x": self.state.x, "y": self.state.y, "max_x": max([self.max_x, *self.room_max.values()]),
                 "powerup": self.state.powerup, "frames": self.frames}
 
     def step(self, action):
@@ -164,6 +167,7 @@ class SmwEnv(gym.Env):
             if self.capture is not None:          # video recording: keep every emulator frame
                 self.capture.append(self.frame.copy())
         self.state, grid = self._read()
+        self._track_room(prev)
         rc = self.cfg.reward
         reward = -rc.time_penalty * self.cfg.frame_skip
         if self.state.x > self.max_x:
@@ -217,6 +221,24 @@ class SmwEnv(gym.Env):
         if terminated or truncated:
             info["events"] = list(self.events)      # [frame, kind, x, y] for the path map
         return grid, float(reward), terminated, truncated, info
+
+    def _track_room(self, prev):
+        """With room_progress on, every room (main level, bonus room) keeps its own furthest x."""
+        if not self.cfg.room_progress:
+            return
+        st = self.state
+        if st.rooms != prev.rooms:
+            self._room_pending = True                     # the new room is still loading: fingerprint it once it runs
+        if self._room_pending and st.in_level and st.pipe_timer == 0:
+            wram = R.wram(self._env.unwrapped.get_ram())
+            sig = R.room_signature(wram)
+            if self.room_sig is not None and sig != self.room_sig:
+                self.room_max[self.room_sig] = self.max_x
+                self.max_x = self.room_max.get(sig, st.x)
+                self.stuck = 0
+            self.room_sig, self._room_pending = sig, False
+        elif self.room_sig is None and st.in_level:
+            self.room_sig = R.room_signature(R.wram(self._env.unwrapped.get_ram()))
 
     def render(self):
         return self.frame

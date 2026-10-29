@@ -135,6 +135,16 @@ level). The experiments now use `YoshiIsland3` (`configs/yi3.toml`). `yi1*` runs
 ## Level map and path view
 Done (see above). Possible additions: compare two runs on one map, heat map of deaths over many runs, real graphics.
 
+## Pipe bonus 3000 vs 100000 (explore inputs, per-room progress, 12 generations, population 60)
+| Level | bonus | seeds | took a pipe | cleared | cleared after taking a pipe |
+|---|---|---|---|---|---|
+| Yoshi's Island 4 | 100000 | 2 | 2/2 | 1/2 | 1/2 |
+| Yoshi's Island 4 | 3000 | 3 | 3/3 | 2/3 | 2/3 |
+| Yoshi's Island 2 | 100000 | 2 | 1/2 | 2/2 | 0/2 |
+| Yoshi's Island 2 | 3000 | 3 | 1/3 | 3/3 | 0/3 |
+A bonus of 3000 gets the sideways pipe on Yoshi's Island 4 found just as often as 100000 (it is on the way) and does not trap runs in the
+bonus room; the downward pipe on Yoshi's Island 2 stays hard to find (needs a deliberate DOWN press). Small samples.
+
 ## Decisions from the user
 - Pipes should be seen as pipes (pipe channel in the `explore` input mode; pipes drawn green on the path map). A pipe is not always the
   only way through a level, so the pipe bonus should be a few thousand (3000), not 100000. Test: `configs/experiments/rooms_pipes_3k.toml`.

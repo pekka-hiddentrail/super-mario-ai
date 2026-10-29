@@ -62,7 +62,7 @@ class NetworkPanel:
         self.graph, self.layout, self.height = graph, layout, height
         grids = [item for item in layout if item["kind"] == "grid"]
         compact = any(":" in item["name"] for item in layout if item["kind"] == "scalar")
-        self.cell = 14 if len(grids) == 1 else 5 if compact else 9 if len(grids) <= 3 else 7
+        self.cell = 14 if len(grids) == 1 else (4 if len(grids) >= 5 else 5) if compact else 9 if len(grids) <= 3 else 7
         self.pos, self.groups = {}, []
         idx, y, sx, scalars = 0, 34, 18, []
         for item in layout:

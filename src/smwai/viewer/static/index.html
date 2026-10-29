@@ -115,7 +115,7 @@ function layout() {
   const L = R.layout || [{ name: 'tiles', kind: 'grid' }];
   const nGrids = L.filter(x => x.kind === 'grid').length, multi = nGrids > 1;
   const compact = L.some(x => x.kind === 'scalar' && x.name.includes(':'));
-  const cell = !multi ? 15 : compact ? 5 : nGrids > 3 ? 6 : 8;
+  const cell = !multi ? 15 : compact ? (nGrids >= 5 ? 4 : 5) : nGrids > 3 ? 6 : 8;
   pos = {}; groups = [];
   let idx0 = 0, gy = multi ? 36 : 70, sx = 0; const scal = [];
   L.forEach(item => {

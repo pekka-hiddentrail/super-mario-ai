@@ -5,6 +5,9 @@ in Python on a headless SNES emulator (planned: [stable-retro](https://github.co
 
 Goal order: Yoshi's Island 1 first, then more levels.
 
+See [docs/FEATURES.md](docs/FEATURES.md) for everything that exists and how the parts fit together, and
+[docs/ROADMAP.md](docs/ROADMAP.md) for findings and plans.
+
 ## Layout
 
 | Path | Purpose |

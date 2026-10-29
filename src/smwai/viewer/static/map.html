@@ -147,11 +147,13 @@ function redraw() {
     const best = p === order[order.length - 1], k = hi > lo ? (p.fitness - lo) / (hi - lo) : 1;
     ctx.globalAlpha = best ? 1 : 0.08 + 0.72 * k;
     ctx.strokeStyle = best ? css('--best') : css('--accent'); ctx.lineWidth = best ? 2.5 : 1.2;
+    const { segments, endsInMain } = mainSegments(p.path);
     ctx.beginPath();
-    p.path.forEach(([x, y], j) => { const px = x / 16 * t, py = (y / 16 + 1) * t; j ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+    segments.forEach(seg => seg.forEach(([x, y], j) => { const px = x / 16 * t, py = (y / 16 + 1) * t; j ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }));
     ctx.stroke();
-    const [ex, ey] = p.path[p.path.length - 1], px = ex / 16 * t, py = (ey / 16 + 1) * t;
-    if (p.cleared) {                       // flag
+    const last = segments[segments.length - 1], [ex, ey] = last[last.length - 1], px = ex / 16 * t, py = (ey / 16 + 1) * t;
+    if (!endsInMain) { /* the run ended in another room: no end marker on this map */ }
+    else if (p.cleared) {                       // flag
       ctx.fillStyle = css('--best'); ctx.fillRect(px, py - 3 * t, 1.2, 3 * t); ctx.fillRect(px, py - 3 * t, 2 * t, t);
     } else {                               // x where the run ended
       ctx.strokeStyle = css('--bad'); ctx.lineWidth = 1.5; const s = Math.max(3, t * 0.6);
@@ -162,6 +164,22 @@ function redraw() {
   drawEvents(t);
   $('rows').innerHTML =[...paths].sort((a, b) => b.fitness - a.fitness).map(p =>
     `<tr><td>${p.generation}</td><td>${p.fitness.toFixed(0)}</td><td>${p.max_x}</td><td>${p.cleared ? 'cleared' : 'ended'}</td></tr>`).join('');
+}
+// A run that goes through a pipe or door continues in another room whose coordinates restart near x = 0.
+// Cut the path where it jumps and keep only the parts in the main level, so no line is drawn across the map.
+function mainSegments(path) {
+  const segs = [[path[0]]];
+  for (let i = 1; i < path.length; i++) {
+    if (Math.abs(path[i][0] - path[i - 1][0]) > 200) segs.push([]);       // a warp: x jumps by hundreds of pixels
+    segs[segs.length - 1].push(path[i]);
+  }
+  const keep = []; let lastEnd = 0, lastKept = true;
+  segs.forEach((seg, i) => {
+    if (!seg.length) return;
+    lastKept = !(i > 0 && seg[0][0] < 120 && lastEnd > 400);              // arrived at the left edge after a long run: bonus room
+    if (lastKept) { keep.push(seg); lastEnd = seg[seg.length - 1][0]; }
+  });
+  return { segments: keep.length ? keep : [path], endsInMain: lastKept };
 }
 // What the best run collected: small dot = coin, ring = big coin, triangle = power-up, diamond = box hit.
 function drawEvents(t) {

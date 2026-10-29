@@ -99,11 +99,30 @@ def param_inputs(raw, prefix):
             raw["neat"]["pop_size"] = st.number_input("Population", 10, 2000, int(raw["neat"]["pop_size"]),
                                                       key=prefix + "pop")
         if True:
-            modes = ["mixed", "channels", "collect"]
+            modes = ["mixed", "channels", "collect", "physics", "explore"]
             raw["env"]["inputs"] = st.selectbox("Network inputs", modes, key=prefix + "inputs",
                                                 index=modes.index(raw["env"].get("inputs", "mixed")),
-                                                help="mixed: one tile grid. channels: separate solid / enemy / "
-                                                     "item grids plus water, Yoshi and power-up.")
+                                                help="mixed: one tile grid. channels: solid / enemy / item grids plus water, "
+                                                     "Yoshi, power-up. collect: + coins. physics: + speeds and what each "
+                                                     "standard jump would do. explore: + a pipe grid (recommended).")
+            raw["env"]["room_progress"] = st.checkbox(
+                "Progress per room (pipes and bonus rooms)", value=bool(raw["env"].get("room_progress", False)),
+                key=prefix + "rooms", help="Each room keeps its own furthest x, so a bonus room is not a dead end.")
+            window = st.text_input("View window [left, right, up, down] in tiles (empty = 6 every way)",
+                                   value=",".join(map(str, raw["env"].get("window") or [])), key=prefix + "window")
+            parts = [p.strip() for p in window.replace("[", "").replace("]", "").split(",") if p.strip()]
+            if len(parts) == 4 and all(p.lstrip("-").isdigit() for p in parts):
+                raw["env"]["window"] = [int(p) for p in parts]
+            else:
+                raw["env"].pop("window", None)
+            adapt = raw.setdefault("adapt", {})
+            adapt["enabled"] = st.checkbox("Adaptive mutation (mutate harder while stuck)",
+                                           value=bool(adapt.get("enabled", False)), key=prefix + "adapt")
+            if adapt["enabled"]:
+                adapt["stall_generations"] = int(st.number_input("...after N generations without a real gain", 1, 50,
+                                                                  int(adapt.get("stall_generations", 3)), key=prefix + "astall"))
+                adapt["min_improvement"] = float(st.number_input("...a gain counts from (fitness)", 0.0, 1000.0,
+                                                                 float(adapt.get("min_improvement", 20.0)), key=prefix + "amin"))
         raw["env"]["stuck_frames"] = st.number_input("Give up after N frames without progress", 30, 2000,
                                                       int(raw["env"]["stuck_frames"]), key=prefix + "stuck")
     with c2:

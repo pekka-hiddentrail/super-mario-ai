@@ -118,7 +118,9 @@ you stand on it, and jump off before it swings too low; then a row of five block
 bridge**, sprite `0x5A`): solid, but they can move from under you. Memory facts: the bridge's extension is table `$151C` (0 = one block, 32 = five
 blocks, x from anchor-32 to anchor+32+16, y = anchor y), cycling every ~100 frames; the swinging block is sprite `0x5F` (position = the block).
 Before the `ride` input mode both counted as enemies and neither as ground, and all 12 earlier runs stalled at x ~549.
-`ride` (explore + a platform channel + landing on platforms in the jump model) is tested in `configs/experiments/ride_yi3.toml`.
+`ride` (explore + a platform channel + landing on platforms in the jump model) was tested in `configs/experiments/ride_yi3.toml` (3 seeds, 15 generations,
+population 60, adaptive mutation): `explore` mean best x 540, `ride` 540 (no change), `ride` + climb bonus 721: one seed (s1) went well past the old stall
+to x 1149 along a high route (4 climbs, up to y 36), the other two did not move. So the climb incentive helped once; platform perception alone did not.
 The saved state `states/manual_*.state` is raw (not loadable as a retro state); it is for analysis only, training always starts at the level start.
 
 ## Known limits

@@ -1,0 +1,21 @@
+# Is the Yoshi Island 3 high route repeatable? `ride-climb` (ride inputs, climb bonus 1/pixel, adaptive mutation) on six new seeds,
+# 20 generations (seed 1 of the first test passed the old wall at x ~549 and reached x 1149 in 15 generations; seeds 2-3 did not).
+# Run: smwai experiment --spec configs/experiments/ride_climb_more.toml ; videos: scripts/video.sh --run <name>
+name = "ride-climb-more"
+base = "configs/yi3.toml"
+seeds = [4, 5, 6, 7, 8, 9]
+generations = 20
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "ride-climb"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

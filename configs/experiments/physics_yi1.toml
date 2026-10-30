@@ -1,0 +1,17 @@
+# Jump predictions as inputs (inputs = "physics": for 6 standard jumps: lands / pit / enemy / coins / landing offset) with 8 hidden nodes.
+# Control: hidden8 of compare_yi1 (same seeds 1-3, 15 generations, 25 genomes). Each run gets generation videos and one long video.
+# Run: scripts/physics_yi1.sh   (log /tmp/physics_yi1.log)
+name = "physics-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3]
+generations = 15
+pop_size = 25
+workers = 12
+
+[[variant]]
+name = "hidden8-physics"
+[variant.env]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+compatibility_threshold = 4.5

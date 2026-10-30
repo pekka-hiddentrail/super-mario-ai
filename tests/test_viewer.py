@@ -1,6 +1,8 @@
 import json
 
 import neat
+import numpy as np
+import pytest
 
 from smwai import config
 from smwai.viewer.replay import genome_graph
@@ -126,3 +128,30 @@ def test_network_panel_draws_inputs_hidden_and_buttons():
     img = panel.draw(obs, {20: 0.9, 7: 0.8}, [0, 0, 0, 0, 0, 0, 0, 1])
     assert img.size == (PANEL_W, 492)
     assert len(set(img.getdata())) > 10          # something was drawn, not a blank panel
+
+
+def test_stitch_joins_videos_and_holds_the_last_frame(tmp_path):
+    imageio = pytest.importorskip("imageio.v2")
+    from smwai import video
+    vids = tmp_path / "videos"
+    vids.mkdir()
+    for g, value in enumerate((50, 200)):
+        w = video._video_writer(vids / f"best_gen_{g:04d}.mp4", fps=10)
+        for _ in range(5):
+            w.append_data(np.full((32, 48, 3), value, dtype=np.uint8))
+        w.close()
+    out = video.stitch_run(tmp_path, gap_seconds=1.0, fps=10)
+    frames = [f for f in imageio.get_reader(str(out))]       # not list(): the reader reports an unbounded length
+    assert len(frames) == 2 * (5 + 10)
+    assert abs(int(frames[7].mean()) - 50) < 12 and abs(int(frames[-1].mean()) - 200) < 12
+
+
+def test_list_videos_includes_the_stitched_video(tmp_path):
+    from smwai.viewer.server import list_videos
+    vdir = tmp_path / "run1" / "videos"
+    vdir.mkdir(parents=True)
+    (vdir / "best_gen_0003.mp4").write_bytes(b"x")
+    (vdir / "all_generations.mp4").write_bytes(b"x")
+    rows = list_videos(tmp_path)
+    assert sorted(r["file"] for r in rows) == ["all_generations.mp4", "best_gen_0003.mp4"]
+    assert {r["file"]: r["generation"] for r in rows} == {"all_generations.mp4": None, "best_gen_0003.mp4": 3}

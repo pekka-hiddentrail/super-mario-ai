@@ -1,0 +1,18 @@
+# 8 hidden nodes (default 5% start) against the plain base on Yoshi's Island 1: 15 generations, 25 genomes, seeds 1 to 3.
+# Every run gets videos of all generations and one long video (all_generations.mp4).
+# Run: scripts/compare_yi1.sh   (log /tmp/compare_yi1.log)
+name = "compare-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3]
+generations = 15
+pop_size = 25
+workers = 12
+
+[[variant]]
+name = "base"
+
+[[variant]]
+name = "hidden8"
+[variant.neat]
+num_hidden = 8
+compatibility_threshold = 4.5   # 16 starting nodes put random genomes ~3.3 apart; at 3.0 every genome is its own species

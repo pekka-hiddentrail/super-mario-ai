@@ -33,6 +33,11 @@ def main(argv=None):
     vd.add_argument("--gen", type=int, help="specific generation instead of the best one")
     vd.add_argument("--force", action="store_true", help="re-render even if the video exists")
 
+    st = sub.add_parser("stitch", help="join the generation videos of a run into one video, a held last frame between them")
+    st.add_argument("--runs-dir", default="runs")
+    st.add_argument("--run", required=True, help="run folder name")
+    st.add_argument("--gap", type=float, default=1.0, help="seconds of the last frame held after each video")
+
     r = sub.add_parser("replay", help="re-run a recorded generation headless and check it")
     r.add_argument("run_dir")
     r.add_argument("generation", type=int)
@@ -95,6 +100,10 @@ def main(argv=None):
                 continue
             print(f"{run.name}: rendering generation {gen} ...", flush=True)
             print("  ->", video.render_run(run, out, generation=gen), flush=True)
+        return
+    if args.cmd == "stitch":
+        from . import video
+        print("->", video.stitch_run(Path(args.runs_dir) / args.run, gap_seconds=args.gap))
         return
     from . import config, train
 

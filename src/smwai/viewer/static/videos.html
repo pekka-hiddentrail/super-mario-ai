@@ -38,7 +38,7 @@ fetch('/api/videos').then(r => r.json()).then(list => {
   document.getElementById('grid').innerHTML = list.map(v => `
     <div class="card">
       <h2>${v.run}</h2>
-      <div class="meta">generation ${v.generation} &middot; fitness ${v.fitness == null ? '?' : v.fitness.toFixed(0)} &middot;
+      <div class="meta">${v.generation == null ? 'all generations' : 'generation ' + v.generation} &middot; fitness ${v.fitness == null ? '?' : v.fitness.toFixed(0)} &middot;
         furthest x ${v.max_x} &middot; ${v.cleared ? '<span class="ok">cleared</span>' : 'did not clear'} &middot; ${v.size_mb} MB</div>
       <video controls preload="metadata" src="/video/${encodeURIComponent(v.run)}/${encodeURIComponent(v.file)}"></video>
     </div>`).join('');

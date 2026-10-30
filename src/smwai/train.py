@@ -1,4 +1,5 @@
 """NEAT training: parallel episode evaluation, per-generation best-run recording."""
+import copy
 import json
 import pickle
 import random
@@ -131,6 +132,7 @@ class RunReporter(neat.reporting.BaseReporter):
         self.node_note = ""
         self.archive = novelty.NoveltyArchive(self.nov.get("k", 5), self.nov.get("archive_max", 300), self.nov.get("add_per_gen", 3))
         self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
+        self.nuke, self.nuke_cool, self.evaluated = None, 0, set()        # the planned nuke (two parents), its cooldown, the keys of the evaluated generation
         self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
         (self.dir / "best").mkdir(parents=True, exist_ok=True)
         self.generation = -1
@@ -182,6 +184,7 @@ class RunReporter(neat.reporting.BaseReporter):
         fits = [g.fitness for g in population.values()]
         best = max(population.values(), key=lambda g: g.fitness)
         self._adapt_mutation(best.fitness)
+        self._plan_nuke(best, species, population)
         _get_env().death_map = self.stats.get("death_map")          # the memory this generation's genomes had
         reward, actions, info = run_episode(best, config, record=True)
         deterministic = abs(reward - best.fitness) < 1e-6
@@ -227,6 +230,58 @@ class RunReporter(neat.reporting.BaseReporter):
         if self.live.get("save_history"):
             shutil.copy(tmp, self.dir / f"population_{self.generation:04d}.pkl")
         tmp.replace(self.dir / "population.pkl")
+
+    def _plan_nuke(self, best, species, population):
+        """A long stall (nuke_after generations) plans the nuke: the best genome and a second parent, the best genome of another species
+        (none left: a fresh random genome, a new lineage). It goes off in end_generation, once the next generation is born and speciated."""
+        a = self.adapt
+        self.evaluated = set(population)
+        if self.nuke_cool > 0:
+            self.nuke_cool -= 1
+        if not a.get("enabled") or not a.get("nuke_after") or self.stall < a["nuke_after"] or self.nuke_cool > 0:
+            return
+        best_species = species.get_species_id(best.key)
+        other = None
+        for sid, sp in species.species.items():
+            if sid != best_species and sp.members:
+                top = max(sp.members.values(), key=lambda g: g.fitness)
+                if other is None or top.fitness > other.fitness:
+                    other = top
+        self.nuke = {"a": copy.deepcopy(best), "b": copy.deepcopy(other) if other is not None else None}
+
+    def end_generation(self, config, population, species_set):
+        """Runs after reproduction and speciation: with a nuke planned, most of the new children are rewritten in place (so the species
+        bookkeeping keeps pointing at them) in three equal groups: strongly mutated copies of parent A, strongly mutated copies of parent B,
+        and crossovers of A and B (matching genes picked from either, the rest from the fitter one) mutated once. The elites stay."""
+        if self.nuke is None:
+            return
+        plan, self.nuke = self.nuke, None
+        a = self.adapt
+        gcfg = config.genome_config
+        parent_a, parent_b = plan["a"], plan["b"]
+        fresh = parent_b is None
+        if fresh:                                            # no second species: a new random lineage
+            parent_b = neat.DefaultGenome(-1)
+            parent_b.configure_new(gcfg)
+            parent_b.fitness = 0.0
+        children = [k for k in population if k not in self.evaluated]
+        chosen = random.sample(children, int(len(children) * a.get("nuke_share", 0.7)))
+        for i, key in enumerate(chosen):
+            if i % 3 == 2:
+                new = neat.DefaultGenome(key)
+                new.configure_crossover(parent_a, parent_b, gcfg)
+                new.mutate(gcfg)
+            else:
+                new = copy.deepcopy(parent_a if i % 3 == 0 else parent_b)
+                for _ in range(a.get("nuke_mutations", 3)):
+                    new.mutate(gcfg)
+            population[key].nodes, population[key].connections, population[key].fitness = new.nodes, new.connections, None
+        self.nuke_cool = a.get("nuke_cooldown", 10)
+        with open(self.dir / "events.jsonl", "a") as f:
+            f.write(json.dumps({"generation": self.generation, "nuke": {"replaced": len(chosen), "children": len(children),
+                                                                        "second_parent": "fresh" if fresh else "species"}}) + "\n")
+        print(f"gen {self.generation}: NUKE after {self.stall} stalled generations: {len(chosen)} of {len(children)} children rewritten "
+              f"(mutated best, mutated {'fresh genome' if fresh else 'best of another species'}, and crossovers of the two)", flush=True)
 
     def _log_slow(self, limit=30.0):
         """Some generations take minutes instead of seconds: note any single episode over `limit` seconds (slow.jsonl)."""

@@ -88,7 +88,11 @@ ADAPT_DEFAULTS = dict(
     min_improvement=20.0,   # a new best counts only if it beats the last one by this much (fitness units, ~pixels)
     power_factor=2.0,       # weight_mutate_power multiplier while boosted
     structure_factor=1.5,   # conn_add_prob / node_add_prob multiplier while boosted
-    rate_add=0.1)           # added to weight_mutate_rate while boosted (capped at 1)
+    rate_add=0.1,           # added to weight_mutate_rate while boosted (capped at 1)
+    nuke_after=0,           # 0 = off. After this many stalled generations the next generation is rewritten (the 'nuke', see RunReporter.end_generation)
+    nuke_share=0.7,         # share of the new children the nuke replaces (the elites and the rest stay)
+    nuke_cooldown=10,       # generations before the nuke may go off again
+    nuke_mutations=3)       # mutations applied to each mutated copy of a parent
 
 HYBRID_DEFAULTS = dict(
     enabled=False,          # NEAT + PPO as one learner: PPO refines the best genomes of each generation (hybrid.py)

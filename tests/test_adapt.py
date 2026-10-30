@@ -63,3 +63,47 @@ def test_tiny_improvements_do_not_reset_the_stall_counter(tmp_path):
     rep.generation = 4
     rep._adapt_mutation(130.0)                                   # +26 over the reference: a real gain
     assert not rep.boosted
+
+
+def test_nuke_rewrites_most_new_children_and_keeps_the_elites(tmp_path):
+    import random
+    ncfg = _neat_cfg(tmp_path)
+    random.seed(3)
+    pop = neat.Population(ncfg)
+    for i, g in enumerate(pop.population.values()):
+        g.fitness = float(i)                                      # a ranking, so there is a best genome
+    pop.species.speciate(ncfg, pop.population, 0)
+    best = max(pop.population.values(), key=lambda g: g.fitness)
+    adapt = {**config.ADAPT_DEFAULTS, "enabled": True, "stall_generations": 3, "nuke_after": 4}
+    rep = RunReporter(tmp_path / "run", ncfg, {"frames": 0}, adapt)
+    rep.generation = 5
+    rep.stall = 3
+    rep._plan_nuke(best, pop.species, pop.population)
+    assert rep.nuke is None                                       # not stalled long enough
+    rep.stall = 4
+    rep._plan_nuke(best, pop.species, pop.population)
+    assert rep.nuke is not None and rep.nuke["a"].key == best.key
+    old_keys = set(pop.population)
+    children = pop.reproduction.reproduce(ncfg, pop.species, ncfg.pop_size, 5)
+    pop.species.speciate(ncfg, children, 6)
+    before = {k: (len(g.connections), sorted(c.weight for c in g.connections.values())[:3]) for k, g in children.items()}
+    rep.end_generation(ncfg, children, pop.species)
+    new_keys = [k for k in children if k not in old_keys]
+    changed = [k for k in new_keys if (len(children[k].connections), sorted(c.weight for c in children[k].connections.values())[:3]) != before[k]]
+    assert len(changed) >= int(0.7 * len(new_keys)) - 1             # about 70% of the children were rewritten ...
+    assert all(children[k].fitness is None for k in changed)
+    for k in old_keys & set(children):                               # ... the elites are untouched
+        assert children[k].fitness is not None
+    for g in children.values():                                      # every genome still makes a working network
+        neat.nn.FeedForwardNetwork.create(g, ncfg)
+    assert rep.nuke is None and rep.nuke_cool == adapt["nuke_cooldown"]
+    events = [__import__("json").loads(line) for line in (tmp_path / "run" / "events.jsonl").read_text().splitlines()]
+    assert events[-1]["nuke"]["second_parent"] in ("species", "fresh")
+    assert events[-1]["nuke"]["replaced"] == int(0.7 * len(new_keys)) and events[-1]["nuke"]["children"] == len(new_keys)
+    rep.stall = 9
+    rep._plan_nuke(best, pop.species, children)
+    assert rep.nuke is None                                          # cooling down: no second nuke right away
+
+
+def test_nuke_is_off_by_default():
+    assert config.ADAPT_DEFAULTS["nuke_after"] == 0

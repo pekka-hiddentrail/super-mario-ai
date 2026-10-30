@@ -16,6 +16,9 @@ inputs = "ride"
 window = [4, 9, 12, 3]
 cancel_opposites = true
 jump_fixes = true
+[variant.neat]
+compatibility_threshold = 2.6   # lower than the 3.0 of yi3.toml: 5 species at the start (with 2.8 and up there is one); 2.0 gave 80 species of one genome and NEAT refused
+min_species_size = 1            # so that many small species cannot make NEAT refuse (it needs species x min size <= population)
 [variant.reward]
 height_bonus = 1.0
 [variant.adapt]

@@ -88,3 +88,8 @@ def test_sprite_platforms_add_one_grid_group():
 def test_big_coins_keep_the_input_count():
     from smwai.env import EnvConfig, n_inputs
     assert n_inputs(EnvConfig(inputs="collect", big_coins=True)) == n_inputs(EnvConfig(inputs="collect"))
+
+
+def test_block_kinds_keep_the_input_count():
+    from smwai.env import EnvConfig, n_inputs
+    assert n_inputs(EnvConfig(inputs="collect", block_kinds=True)) == n_inputs(EnvConfig(inputs="collect"))

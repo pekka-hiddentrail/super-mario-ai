@@ -278,3 +278,15 @@ def test_flying_box_is_a_platform_with_the_flag():
     assert R.platform_blocks(st) == []
     R.mark_platforms(st.sprites)
     assert len(R.platform_blocks(st)) == 1 and R.sprite_grids(st, 6)[0].sum() == 0
+
+
+def test_turn_block_is_told_from_other_solid_tiles_only_when_asked():
+    w = make_wram()
+    st = R.read_state(w)
+    st.x, st.y = 0x100, 0x100
+    idx = lambda wx, wy: (wx // 256) * R.TILES_PER_PAGE + (wy // 16) * 16 + (wx % 256) // 16
+    for wx, low in ((0x108, 0x30), (0x118, 0x1E)):                 # a stone block (0x130) and a turn block (0x11E)
+        w[R.MAP16_HIGH + idx(wx, 0x110)], w[R.MAP16_LOW + idx(wx, 0x110)] = 1, low
+    assert sorted(set(R.solid_grid(w, st).ravel())) == [0, 1]
+    g = R.solid_grid(w, st, kinds=True)
+    assert (g == 1).sum() == 1 and (g == 2).sum() == 1

@@ -58,6 +58,7 @@ PLATFORM_EXTENT = {0x55: (-8, 80),    # checkerboard platform, moves sideways
                    0x83: (0, 16)}     # the flying ? box: one block that flies a pattern and carries Mario (measured on Yoshi's Island 1)
 HARMLESS_SPRITES = {0xB9}  # message box (the speech-bubble block): solid and harmless, not an enemy
 COIN_TILE = 0x2B           # Map16 low byte of a coin block (high byte 0)
+TURN_BLOCK = 0x11E          # Map16 0x11E: the yellow block with the two 'eyes' (turn block): solid, but a spin jump from above breaks it (measured: Yoshi's Island 1, x 1904)
 BIG_COIN_TILES = (0x2D, 0x2E)   # the big (Yoshi) coin: two tiles, top and bottom; touching either one counts it (measured: scripts/probe_coin_tiles.py)
 MAP16_LOW = 0xC800
 PIPE_TILES = range(0x33, 0x40)   # Map16 0x133-0x13F: pipe pieces of every colour (colour is the palette, the tiles are the same; seen: 0x133/0x134 and 0x137/0x138 tops, 0x135/0x136 body, 0x13B-0x13F sideways pipe)
@@ -208,8 +209,8 @@ def _cells(state, view):
             yield row, col, state.x + dx, state.y + dy
 
 
-def solid_grid(ram, state, view=6):
-    """Window grid centred on Mario (rows up..down, columns left..right): 1 where the Map16 tile is solid."""
+def solid_grid(ram, state, view=6, kinds=False):
+    """Window grid centred on Mario (rows up..down, columns left..right): 1 where the Map16 tile is solid; with kinds=True a turn block is 2."""
     grid = np.zeros(grid_shape(view), dtype=np.int8)
     for row, col, wx, wy in _cells(state, view):
         tx, ty = (wx + 8) // 16, wy // 16
@@ -217,7 +218,7 @@ def solid_grid(ram, state, view=6):
             continue
         idx = MAP16_HIGH + (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
         if idx < len(ram) and ram[idx] == 1:
-            grid[row, col] = SOLID
+            grid[row, col] = 2 if kinds and ram[MAP16_LOW + idx - MAP16_HIGH] == TURN_BLOCK & 0xFF else SOLID
     return grid
 
 

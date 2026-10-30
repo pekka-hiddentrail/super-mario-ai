@@ -10,6 +10,8 @@ BIN = 32
 NAMES = ("death_here", "death_near", "death_far", "death_dist")
 TAKEOFF_NAMES = ("bad_dist", "bad_share", "bad_hold", "bad_run")
 KEY = "takeoff"                      # the takeoff table inside DeathMap.export(); every other key is a bin number
+TAKEOFF_DECAY = 0.5                  # a bad takeoff halves every generation and is gone after four (1, .5, .25, .125, .0625)
+TAKEOFF_MIN = 0.07
 MAX_HOLD = 16                        # steps of 4 frames; longer holds all read as 16
 
 
@@ -26,8 +28,8 @@ class DeathMap:
         takeoffs: {genome id: [x, y, buttons mask, hold steps, run 0/1] or None}. Returns the takeoffs it kept (for the run's record)."""
         ranked = sorted(fitness, key=fitness.get, reverse=True)[: max(1, int(len(fitness) * self.top_share))]
         self.bins = {b: v * self.decay for b, v in self.bins.items() if v * self.decay > 0.01}
-        self.takeoffs = {b: [w * self.decay, h * self.decay, r * self.decay] for b, (w, h, r) in self.takeoffs.items()
-                         if w * self.decay > 0.01}
+        self.takeoffs = {b: [w * TAKEOFF_DECAY, h * TAKEOFF_DECAY, r * TAKEOFF_DECAY] for b, (w, h, r) in self.takeoffs.items()
+                         if w * TAKEOFF_DECAY > TAKEOFF_MIN}
         kept = []
         for gid in ranked:
             x, _y, cleared = ends[gid]

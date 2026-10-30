@@ -44,6 +44,7 @@ class EnvConfig:
     window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
     inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options | explore: + pipes
     death_inputs: bool = False     # + four inputs from the death map: where earlier attempts died or got stuck (deathmap.py)
+    ride_motion: bool = False      # + two inputs: how Mario moves while standing, beyond his own speed (a moving platform carries him; no sprite model needed)
     takeoff_inputs: bool = False   # + four inputs from where the best runs took off for their fatal fall, and how (deathmap.py)
     jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
                                    # values stay as they were at takeoff while Mario is in the air
@@ -88,7 +89,8 @@ def input_layout(cfg):
     return (_base_layout(cfg) + ([(name, "scalar") for name in jumpview.run_names()] if cfg.run_options else [])
             + ([(name, "scalar") for name in PLATFORM_INPUTS] if cfg.predict_platforms else [])
             + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else [])
-            + ([(name, "scalar") for name in deathmap.TAKEOFF_NAMES] if cfg.takeoff_inputs else []))
+            + ([(name, "scalar") for name in deathmap.TAKEOFF_NAMES] if cfg.takeoff_inputs else [])
+            + ([(name, "scalar") for name in RIDE_INPUTS] if cfg.ride_motion else []))
 
 
 def _base_layout(cfg):
@@ -136,7 +138,23 @@ def build_observation(ram, state, cfg, deaths=None, memory=None):
         obs = np.concatenate([obs, np.array(deathmap.features(deaths, state.x), dtype=np.int8)])
     if cfg.takeoff_inputs:
         obs = np.concatenate([obs, np.array(deathmap.takeoff_features(deaths, state.x), dtype=np.int8)])
+    if cfg.ride_motion:
+        obs = np.concatenate([obs, ride_motion(state, (memory or {}).get("prev"))])
     return obs
+
+
+RIDE_INPUTS = ("ride_dy", "ride_dx")
+
+
+def ride_motion(state, prev):
+    """Mario's own motion while he stands (on the ground in this step and the one before): the game reports 'on the ground' and a y speed
+    of 0 on a platform too, so the platform shows only as Mario moving although he does not walk or fall. ride_dy = pixels moved up/down
+    over the step (positive = down; a rising platform is negative), ride_dx = pixels moved sideways beyond what his x speed explains.
+    Slopes also move Mario up and down, so this is a hint, not proof of a platform."""
+    if prev is None or state.in_air or prev.in_air:
+        return np.zeros(2, dtype=np.int8)
+    clip = lambda v: int(max(-16, min(16, v)))
+    return np.array([clip(state.y - prev.y), clip(state.x - prev.x - round(state.x_speed / 4))], dtype=np.int8)
 
 
 def _base_observation(ram, state, cfg, memory=None):
@@ -206,6 +224,7 @@ class SmwEnv(gym.Env):
         st = R.read_state(ram)
         if prev is not None:
             R.annotate_motion(prev.sprites, st.sprites, self.cfg.frame_skip)      # platform speeds from the last step
+        self._memory["prev"] = prev
         return st, build_observation(ram, st, self.cfg, self.death_map, self._memory)
 
     def reset(self, seed=None, options=None):

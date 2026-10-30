@@ -119,6 +119,10 @@ def param_inputs(raw, prefix):
             raw["env"]["cancel_opposites"] = st.checkbox(
                 "Left+right and up+down cancel each other", value=bool(raw["env"].get("cancel_opposites", False)),
                 key=prefix + "cancel", help="Pressing both buttons of a pair presses neither.")
+            raw["env"]["ride_motion"] = st.checkbox(
+                "Riding inputs: how Mario moves while standing", value=bool(raw["env"].get("ride_motion", False)),
+                key=prefix + "ridemotion", help="Two inputs: up/down and sideways movement beyond Mario's own speed while he stands, which is how a moving platform "
+                                                "shows without any sprite model (slopes also move him, so it is a hint).")
             raw["env"]["takeoff_inputs"] = st.checkbox(
                 "Memory inputs: bad takeoffs of earlier generations", value=bool(raw["env"].get("takeoff_inputs", False)),
                 key=prefix + "takeoff", help="Four inputs: how far the nearest takeoff is where the best runs of recent generations took off for their fatal fall, "

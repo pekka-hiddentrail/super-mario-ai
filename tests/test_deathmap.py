@@ -84,3 +84,27 @@ def test_env_follows_the_last_takeoff():
     assert env._takeoff is None
     step(False, True, 148, "RIGHT")                      # walking off a ledge is a takeoff with no jump
     assert env._takeoff["hold"] == 0 and env._takeoff["run"] == 0
+
+
+def test_ride_motion_shows_a_carried_mario():
+    from types import SimpleNamespace as S
+    from smwai.env import RIDE_INPUTS, ride_motion
+    still = S(in_air=False, x=100, y=200, x_speed=0)
+    assert ride_motion(still, None).tolist() == [0, 0]                                   # first step: nothing to compare with
+    assert ride_motion(S(in_air=False, x=100, y=192, x_speed=0), still).tolist() == [-8, 0]     # a rising platform: up 8 px
+    assert ride_motion(S(in_air=False, x=108, y=200, x_speed=0), still).tolist() == [0, 8]      # carried right although he does not walk
+    assert ride_motion(S(in_air=False, x=108, y=200, x_speed=32), still).tolist() == [0, 0]     # walking 8 px in 4 frames explains the move
+    assert ride_motion(S(in_air=True, x=108, y=150, x_speed=0), still).tolist() == [0, 0]       # in the air the jump physics apply
+    assert n_inputs(EnvConfig(inputs="ride", ride_motion=True)) == n_inputs(EnvConfig(inputs="ride")) + 2
+    assert [n for n, _ in input_layout(EnvConfig(inputs="ride", ride_motion=True))][-2:] == list(RIDE_INPUTS)
+
+
+def test_a_bad_takeoff_fades_in_four_generations():
+    m = D.DeathMap(top_share=1.0)
+    m.update({0: [320, 0, False]}, {0: 1.0}, {0: [300, 0, 0, 6, 1]})
+    weights = []
+    for _ in range(5):
+        m.update({}, {}, None)
+        weights.append(m.takeoffs.get(300 // D.BIN, [0])[0])
+    assert weights == [0.5, 0.25, 0.125, 0, 0]             # 0.0625 is below the cut: four generations
+    assert not m.takeoffs                                  # gone after four generations without a new death there

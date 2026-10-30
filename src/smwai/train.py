@@ -88,7 +88,8 @@ def eval_genome_full(genome, config, death_map=None):
     total, _, info = run_episode(genome, config)
     return total, info["frames"], {"seconds": round(time.time() - t0, 1), "print": novelty.fingerprint(info["cells"], info.get("events", [])),
                                    "end": [info["x"], info["y"], bool(info.get("cleared"))], "takeoff": info.get("takeoff"),
-                                   "cells": sorted(info["cells"]) if _get_env().cfg.death_nodes else None}
+                                   "cells": sorted(info["cells"]) if _get_env().cfg.death_nodes else None,
+                                   "flips": info.get("node_flips", 0)}
 
 
 class PoolEvaluator:
@@ -127,6 +128,7 @@ class RunReporter(neat.reporting.BaseReporter):
         self.deaths = deathmap.DeathMap()                  # always kept (takeoffs.jsonl); the networks read it only with death/takeoff inputs
         self.memory_inputs = death_inputs or death_nodes
         self.nodes = deathmap.NodeMemory() if death_nodes else None
+        self.node_note = ""
         self.archive = novelty.NoveltyArchive(self.nov.get("k", 5), self.nov.get("archive_max", 300), self.nov.get("add_per_gen", 3))
         self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
         self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
@@ -211,7 +213,7 @@ class RunReporter(neat.reporting.BaseReporter):
         self._remember_deaths(population)              # before novelty selection turns fitness into a blended score
         extra = self._novelty(population, best)
         print(f"gen {self.generation:4d}  best {best.fitness:8.1f}  mean {np.mean(fits):8.1f}  "
-              f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}{extra}", flush=True)
+              f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}{extra}{self.node_note}", flush=True)
 
     def _save_population(self, population, species):
         """With [live] save_population: the whole generation (genome, species, fitness), for the live view."""
@@ -263,6 +265,12 @@ class RunReporter(neat.reporting.BaseReporter):
             return any(any(a == cx and abs(b - cy) <= 1 for a, b in run) and any(a > cx for a, _ in run) for run in cells)
 
         self.nodes.update(kept[0] if kept else None, passed)
+        affected = sum(1 for b in behaviour.values() if b.get("flips"))
+        flips = sum(b.get("flips", 0) for b in behaviour.values())
+        self.node_note = f"  nodes {len(self.nodes.nodes)}, {affected}/{len(behaviour)} genomes changed by them ({flips} presses)"
+        with open(self.dir / "nodes.jsonl", "a") as f:
+            f.write(json.dumps({"generation": self.generation, "nodes": len(self.nodes.nodes), "genomes_changed": affected,
+                                "genomes": len(behaviour), "presses_changed": flips}) + "\n")
 
     def _novelty(self, population, best):
         """Score the generation's behaviour novelty and map coverage; with weight > 0 also turn fitness into the selection score."""

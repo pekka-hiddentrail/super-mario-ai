@@ -97,7 +97,7 @@ class LivePlayer(threading.Thread):
             head = (f"LIVE {run_dir.name[:20]}  gen {data['generation']}  species {species_ids.index(sid) + 1}/{len(species_ids)}"
                     f" ({sizes[sid]} genomes)")
             note = f"genome {m['gid']}  fit {m['fitness']:.0f}  rank {ranks[m['gid']]}/{len(members)}"
-            self.episode(run_dir, m["genome"], head, note, None)
+            self.episode(run_dir, m["genome"], head, note, generation_death_map(run_dir, data["generation"]))
             if pop_file.stat().st_mtime != stamp:
                 return
 
@@ -109,6 +109,14 @@ class LivePlayer(threading.Thread):
             time.sleep(max(0.0, FRAME_SECONDS / self.speed - (time.time() - t0)))
             t0 = time.time()
         time.sleep(1.0)
+
+
+def generation_death_map(run_dir, generation):
+    """The memory (death map, takeoffs, nodes) the genomes of that generation were evaluated with: it is stored with the generation's best run."""
+    try:
+        return json.loads((Path(run_dir) / "best" / f"gen_{generation:04d}.json").read_text()).get("death_map")
+    except (OSError, ValueError):
+        return None
 
 
 def episode_frames(run_dir, genome, head, note, death_map, capture=False, max_steps=None):

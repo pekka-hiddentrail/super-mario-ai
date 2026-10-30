@@ -202,6 +202,7 @@ class SmwEnv(gym.Env):
         self.events = []
         self._memory = {}
         self._takeoff = None
+        self.node_flips = 0
         self.death_map = None         # DeathMap.export(): set by the trainer (and by replays) when cfg.death_inputs is on
         self.best_ground_y = 0
         self._pipes = set()
@@ -237,6 +238,7 @@ class SmwEnv(gym.Env):
             self.frame = self._env.step(np.zeros(12, dtype=np.int8))[0]
         self._memory = {}
         self._takeoff = None
+        self.node_flips = 0
         self.state, grid = self._read()
         self.max_x = self.state.x
         self.frames = 0
@@ -323,6 +325,7 @@ class SmwEnv(gym.Env):
         truncated = self.stuck >= self.cfg.stuck_frames or self.frames >= self.cfg.max_frames
         info = self._info()
         info.update(died=died, cleared=cleared)
+        info["node_flips"] = self.node_flips
         if died and self._takeoff is not None:
             t = self._takeoff
             info["takeoff"] = [t["x"], t["y"], t["mask"], t["hold"], t["run"]]      # the jump (or walk off a ledge) that ended in death
@@ -334,12 +337,15 @@ class SmwEnv(gym.Env):
         """Network outputs (0..1) -> pressed buttons (above 0.5); with death_nodes, nodes near Mario's spot shift the outputs' logits while he is on the ground."""
         out = np.asarray(out, dtype=np.float64)
         nodes = (self.death_map or {}).get(deathmap.NODES) if self.cfg.death_nodes else None
+        pressed = out > 0.5
         if nodes and not self.state.in_air:
             nudge = np.array(deathmap.node_nudge(nodes, self.state.x, self.state.y))
             if nudge.any():
                 p = np.clip(out, 1e-6, 1 - 1e-6)
-                return np.log(p / (1 - p)) + deathmap.NODE_LOGIT * nudge > 0
-        return out > 0.5
+                nudged = np.log(p / (1 - p)) + deathmap.NODE_LOGIT * nudge > 0
+                self.node_flips += int((nudged != pressed).sum())          # buttons the nodes turned on or off in this episode
+                return nudged
+        return pressed
 
     def _track_takeoff(self, prev, action):
         """Remember the last takeoff: where Mario left the ground, what was pressed, and for how many steps jump (A or B) stayed held."""

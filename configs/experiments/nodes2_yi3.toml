@@ -1,0 +1,39 @@
+# The seeds of nodes_yi3 that were lost (a syntax error in train.py broke every run launched after seed 4 of the nodes variant): seeds 5-10, same setup, 20 generations.
+# Run: scripts/nodes_yi3.sh   (log /tmp/nodes_yi3.log)
+name = "nodes2-yi3"
+base = "configs/yi3.toml"
+seeds = [5, 6, 7, 8, 9, 10]
+generations = 20
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "base"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+window = [4, 9, 12, 3]
+cancel_opposites = true
+jump_fixes = true
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "nodes"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+window = [4, 9, 12, 3]
+cancel_opposites = true
+jump_fixes = true
+death_nodes = true
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

@@ -184,3 +184,17 @@ def test_a_node_where_attempts_still_die_fades_fast_even_if_they_pass_it(tmp_pat
     weights = {n[0]: n[3] for n in rep.nodes.nodes}
     assert weights[285] == 0.5                  # still where the best attempt takes off and dies: the node fails, passing it does not count
     assert weights[150] == 0.85                 # attempts pass it and take off elsewhere: it works
+
+
+def test_decide_counts_the_presses_the_nodes_changed():
+    from types import SimpleNamespace as S
+    from smwai.env import SmwEnv
+    env = SmwEnv(EnvConfig(death_nodes=True))
+    env.death_map = {"nodes": [{"x": 300, "y": 200, "w": 1.0, "n": [-0.5, 0.5, 0, 0, 0, 0, 0, 0]}]}
+    env.node_flips = 0
+    env.state = S(in_air=False, x=300, y=200)
+    env.decide([0.7, 0.3, 0.9, 0.2, 0.1, 0.1, 0.1, 0.1])         # A stops, B starts
+    env.decide([0.0001, 0.9999, 0.9, 0.2, 0.1, 0.1, 0.1, 0.1])     # too sure to flip
+    env.state = S(in_air=True, x=300, y=200)
+    env.decide([0.7, 0.3, 0.9, 0.2, 0.1, 0.1, 0.1, 0.1])         # in the air: nodes do nothing
+    assert env.node_flips == 2

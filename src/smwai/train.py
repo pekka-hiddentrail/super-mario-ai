@@ -365,6 +365,10 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
     neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
                            neat.DefaultStagnation, str(run_dir / "neat.cfg"))
     pop = neat.Checkpointer.restore_checkpoint(resume) if resume else neat.Population(neat_cfg)
+    if not resume and cfg.neat.get("start_links"):
+        from .start import add_start_links
+        for genome in pop.population.values():
+            add_start_links(genome, neat_cfg.genome_config, int(cfg.neat["start_links"]), random)
     n_workers = cfg.workers if workers is None else workers
     # the pool must fork before this process creates its own emulator
     stats = {"frames": 0}

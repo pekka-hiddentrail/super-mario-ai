@@ -2,6 +2,7 @@
 runs, the network next to it (input grids, hidden nodes, connections, buttons), as in MarI/O."""
 import json
 import pickle
+import random
 from pathlib import Path
 
 import neat
@@ -102,14 +103,9 @@ class NetworkPanel:
                 self.groups.append(("label", prefix, 0, 10, y + r * 12))
                 for k, (i, field) in enumerate(items):
                     self._text_item(i, field, label_w + k * 76, y + r * 12)
-        cols = {}
-        for h in graph["hidden"]:
-            cols.setdefault(graph["layer"][str(h)], []).append(h)
-        top = max(list(cols) + [1]) + 1
-        for layer, nodes in cols.items():
-            for i, h in enumerate(nodes):
-                self.pos[h] = ((200 + (layer - 1) * (210 / max(1, top - 1))) / PANEL_W * self.lw,
-                               50 + (i + 0.5) * (self.lh - 100) / len(nodes))
+        for h in graph["hidden"]:            # hidden nodes sit at a random place between the input grids and the buttons (the same one in every video: seeded by the node id)
+            rnd = random.Random(f"hidden-{h}")
+            self.pos[h] = ((190 + rnd.random() * 260) / PANEL_W * self.lw, 50 + rnd.random() * (self.lh - 100))
         for i, o in enumerate(graph["outputs"]):
             self.pos[o] = (480 / PANEL_W * self.lw, 56 + (i + 0.5) * (self.lh - 110) / len(graph["outputs"]))
 
@@ -183,8 +179,12 @@ def _play_network(run_dir, generation, env):
                            neat.DefaultStagnation, str(run_dir / "neat.cfg"))
     with open(run_dir / "best" / f"gen_{generation:04d}.pkl", "rb") as f:
         genome = pickle.load(f)
+    genome_id = genome.key
     net = neat.nn.FeedForwardNetwork.create(genome, neat_cfg)
     graph = genome_graph(genome, neat_cfg)
+    outputs = set(graph["outputs"])
+    graph["hidden"] = sorted(k for k in genome.nodes if k not in outputs)       # also hidden nodes nothing reaches yet: the videos show every node of the genome
+    graph["layer"].update({str(k): 1 for k in graph["hidden"] if str(k) not in graph["layer"]})
     watch = graph["hidden"] + graph["outputs"]
     env.death_map = json.loads((run_dir / "best" / f"gen_{generation:04d}.json").read_text()).get("death_map")
     obs, info = env.reset()
@@ -199,6 +199,7 @@ def _play_network(run_dir, generation, env):
         total += reward
         steps[-1].update(n=len(env.capture) - before, reward=total)
         if term or trunc:
+            info["genome"] = genome_id
             return steps, graph, info
 
 
@@ -241,7 +242,7 @@ def render_run(run_dir, out_path=None, generation=None):
     out_path = Path(out_path or run_dir / "videos" / f"best_gen_{generation:04d}.mp4")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     result = "cleared" if info.get("cleared") else "died" if info.get("died") else "timed out"
-    head = f"{run_dir.name}   generation {generation}"
+    head = f"{run_dir.name}   generation {generation}" + (f"   genome {info['genome']}" if "genome" in info else "")
     height = 224 * SCALE + BANNER
     panel = NetworkPanel(graph, layout, env_view(cfg.env), height) if graph else None
     writer = imageio.get_writer(str(out_path), fps=60, codec="libx264", quality=7, macro_block_size=None,

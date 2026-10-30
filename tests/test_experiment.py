@@ -43,3 +43,17 @@ def test_format_table_handles_missing_values():
     text = experiment.format_table([{"variant": "v", "seeds": 2, "clears": 0, "best_x": 100.0,
                                      "best_fitness": 90.0, "frames_to_clear": None, "total_frames": 5000.0}])
     assert "| v | 2 | 0/2 | 100 | 90 | - | 5,000 |" in text
+
+
+def test_runs_are_named_with_the_launch_stamp_and_latest_stamp_finds_it(tmp_path):
+    spec = tmp_path / "s.toml"
+    spec.write_text('name = "t"\nbase = "configs/yi3.toml"\ngenerations = 1\n[[variant]]\nname = "a"\n')
+    runs_dir = str(tmp_path / "runs")
+    _, out_dir, runs = experiment.plan(spec, runs_dir=runs_dir, stamp="20261030-1445")
+    assert runs[0]["raw"]["name"] == "20261030-1445-t-a-s1"
+    assert out_dir.name == "20261030-1445-t"
+    out_dir.mkdir(parents=True)
+    (out_dir.parent / "20261029-0900-t").mkdir()
+    (out_dir.parent / "20261030-1445-tt").mkdir()          # another experiment whose name ends the same: not ours
+    assert experiment.latest_stamp("t", runs_dir) == "20261030-1445"
+    assert experiment.latest_stamp("nothing", runs_dir) is None

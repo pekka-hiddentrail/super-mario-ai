@@ -34,6 +34,7 @@ YOSHI_COINS = 0x1420       # big (Yoshi/dragon) coins collected in this level
 BONUS_STARS = 0x1900       # bonus stars won at the goal bar (read on the clear step, before the tally counts it down)
 USED_BLOCK = 0x32          # Map16 0x132: a ? block that has been hit (count rises when one is hit)
 IN_WATER = 0x75            # player is in water
+MESSAGE = 0x1426           # message box trigger: 0 none, 1/2 = message 1/2, 3 = Yoshi thanks. The game waits for A or B until the box is closed.
 ON_YOSHI = 0x187A          # riding Yoshi
 END_LEVEL_TIMER = 0x1493   # non-zero once the goal is hit
 SPRITE_STATUS = 0x14C8     # 12 slots, 0 = empty
@@ -107,6 +108,7 @@ class MarioState:
     rooms: int = 0
     yoshi_coins: int = 0
     bonus_stars: int = 0        # set when the goal bar is hit: 0 for a low hit, more the higher the bar was hit
+    message: int = 0            # a message box is open (the text pops up and Mario cannot move)
     used_blocks: int = 0        # number of already-hit blocks in the level (rises on every block hit)
     sprites: list = field(default_factory=list)
 
@@ -161,7 +163,7 @@ def read_state(ram):
         x_speed=u8(ram, PLAYER_X_SPEED) - 256 if u8(ram, PLAYER_X_SPEED) > 127 else u8(ram, PLAYER_X_SPEED),
         y_speed=u8(ram, PLAYER_Y_SPEED) - 256 if u8(ram, PLAYER_Y_SPEED) > 127 else u8(ram, PLAYER_Y_SPEED),
         in_air=u8(ram, IN_AIR) != 0,
-        pipe_timer=u8(ram, PIPE_TIMER), pipe_action=u8(ram, PIPE_ACTION), rooms=u8(ram, ROOMS),
+        pipe_timer=u8(ram, PIPE_TIMER), pipe_action=u8(ram, PIPE_ACTION), rooms=u8(ram, ROOMS), message=u8(ram, MESSAGE),
         sprites=read_sprites(ram))
 
 

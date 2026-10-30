@@ -212,3 +212,10 @@ def test_standing_on_the_rotating_platform_is_detected():
     st.in_air, st.x = False, st.x + 100
     assert R.standing_on_swing(st) is None
     assert len(R.platform_blocks(st, 0, swing=True)) == 4 and len(R.platform_blocks(st, 0)) == 1
+
+
+def test_message_box_flag():
+    w = make_wram()
+    assert R.read_state(w).message == 0
+    w[R.MESSAGE] = 2
+    assert R.read_state(w).message == 2

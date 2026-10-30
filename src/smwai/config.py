@@ -20,10 +20,10 @@ activation_options = sigmoid
 aggregation_default = sum
 aggregation_mutate_rate = 0.0
 aggregation_options = sum
-bias_init_mean = 0.0
-bias_init_stdev = 1.0
-bias_max_value = 30.0
-bias_min_value = -30.0
+bias_init_mean = {bias_init_mean}
+bias_init_stdev = {bias_init_stdev}
+bias_max_value = {bias_limit}
+bias_min_value = -{bias_limit}
 bias_mutate_power = 0.5
 bias_mutate_rate = 0.7
 bias_replace_rate = 0.1
@@ -37,7 +37,7 @@ feed_forward = True
 initial_connection = {initial_connection}
 node_add_prob = {node_add_prob}
 node_delete_prob = {node_delete_prob}
-num_hidden = 0
+num_hidden = {num_hidden}
 num_inputs = {n_inputs}
 num_outputs = {n_outputs}
 response_init_mean = 1.0
@@ -48,9 +48,9 @@ response_mutate_power = 0.0
 response_mutate_rate = 0.0
 response_replace_rate = 0.0
 weight_init_mean = 0.0
-weight_init_stdev = 1.0
-weight_max_value = 30
-weight_min_value = -30
+weight_init_stdev = {weight_init_stdev}
+weight_max_value = {weight_limit}
+weight_min_value = -{weight_limit}
 weight_mutate_power = {weight_mutate_power}
 weight_mutate_rate = {weight_mutate_rate}
 weight_replace_rate = 0.1
@@ -70,7 +70,7 @@ min_species_size = {min_species_size}
 """
 
 NEAT_DEFAULTS = dict(
-    pop_size=100, initial_connection="partial_direct 0.05", conn_add_prob=0.5,
+    pop_size=100, initial_connection="partial_direct 0.05", num_hidden=0, bias_init_mean=0.0, bias_init_stdev=1.0, bias_limit=30.0, weight_init_stdev=1.0, weight_limit=30.0, conn_add_prob=0.5,
     conn_delete_prob=0.2, node_add_prob=0.2, node_delete_prob=0.1, weight_mutate_rate=0.8,
     weight_mutate_power=0.5, compatibility_threshold=3.0, max_stagnation=15,
     survival_threshold=0.2, elitism=2, min_species_size=2)

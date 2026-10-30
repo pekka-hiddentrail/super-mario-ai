@@ -192,7 +192,7 @@ class RunReporter(neat.reporting.BaseReporter):
         with open(stem.with_suffix(".pkl"), "wb") as f:
             pickle.dump(best, f)
         stem.with_suffix(".json").write_text(json.dumps({
-            "generation": self.generation, "fitness": best.fitness, "max_x": info["max_x"],
+            "generation": self.generation, "genome": best.key, "fitness": best.fitness, "max_x": info["max_x"],
             "cleared": info["cleared"], "buttons": BUTTONS, "actions": actions,
             "path": info["path"], "events": info.get("events", []),
             "death_map": self.stats.get("death_map")}))

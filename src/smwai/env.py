@@ -15,6 +15,7 @@ from . import ram as R
 
 GAME = "SuperMarioWorld-Snes-v0"
 BUTTONS = ["A", "B", "X", "Y", "UP", "DOWN", "LEFT", "RIGHT"]
+MESSAGE_MAX_FRAMES = 600   # safety limit for closing a message box (it takes about 20 frames)
 
 
 @dataclass
@@ -55,6 +56,7 @@ class EnvConfig:
     predict_platforms: bool = False  # jump options use where moving platforms will be during the arc; + 4 inputs about the nearest platform
     cancel_opposites: bool = False  # LEFT+RIGHT cancel each other, and so do UP+DOWN (networks otherwise hold both most of the time)
     room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
+    skip_messages: bool = True    # a message box freezes the game until A or B is pressed: close it by itself, not counted in the frame budget or the stuck rule
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -240,6 +242,18 @@ class SmwEnv(gym.Env):
         self._memory["prev"] = prev
         return st, build_observation(ram, st, self.cfg, self.death_map, self._memory)
 
+    def _close_message(self):
+        """While a message box is open nothing moves and the network cannot do anything about it: hold A until it closes.
+        These frames are not counted (self.frames, the stuck rule), but a video recording keeps them."""
+        pad = np.zeros(12, dtype=np.int8)
+        pad[self._pad[BUTTONS.index("A")]] = 1
+        for _ in range(MESSAGE_MAX_FRAMES):
+            if R.u8(R.wram(self._env.unwrapped.get_ram()), R.MESSAGE) == 0:
+                return
+            self.frame = self._env.step(pad)[0]
+            if self.capture is not None:
+                self.capture.append(self.frame.copy())
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         index = (options or {}).get("level_index", 0)
@@ -279,6 +293,8 @@ class SmwEnv(gym.Env):
             self.frames += 1
             if self.capture is not None:          # video recording: keep every emulator frame
                 self.capture.append(self.frame.copy())
+        if self.cfg.skip_messages:
+            self._close_message()
         self.state, grid = self._read(prev)
         self._track_takeoff(prev, action)
         self._track_room(prev)

@@ -24,7 +24,8 @@ def main(argv=None):
     ex = sub.add_parser("experiment", help="run variants x seeds from a spec and summarise")
     ex.add_argument("--spec", required=True)
     ex.add_argument("--runs-dir", default="runs")
-    ex.add_argument("--summary-only", action="store_true", help="do not train, just rebuild the table")
+    ex.add_argument("--summary-only", action="store_true", help="do not train, just rebuild the table (of the latest launch unless --stamp)")
+    ex.add_argument("--stamp", help="continue or summarise an earlier launch, e.g. 20261030-1445 (default: a new launch stamped now)")
 
     vd = sub.add_parser("video", help="render the best run of each training run to mp4")
     vd.add_argument("--runs-dir", default="runs")
@@ -80,7 +81,7 @@ def main(argv=None):
         return serve(args.runs_dir, args.port)
     if args.cmd == "experiment":
         from .experiment import run_experiment
-        run_experiment(args.spec, args.runs_dir, args.summary_only)
+        run_experiment(args.spec, args.runs_dir, args.summary_only, args.stamp)
         return
     if args.cmd == "video":
         from . import video

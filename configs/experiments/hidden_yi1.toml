@@ -1,0 +1,25 @@
+# Internal neurons from the start: 8 hidden nodes in every first-generation genome, so buttons are not driven only by direct input links.
+# Variants: no hidden nodes (base), 8 hidden with the usual sparse wiring, 8 hidden with no input->button links at the start.
+# Run: scripts/experiment.sh configs/experiments/hidden_yi1.toml
+name = "hidden-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3]
+generations = 10
+pop_size = 100
+workers = 12
+
+[[variant]]
+name = "base"
+
+[[variant]]
+name = "hidden8"
+[variant.neat]
+num_hidden = 8
+compatibility_threshold = 4.5   # 16 starting nodes put random genomes at ~3.3 apart: at 3.0 every genome was its own species and training crashed
+
+[[variant]]
+name = "hidden8-nodirect"
+[variant.neat]
+num_hidden = 8
+compatibility_threshold = 4.5   # 16 starting nodes put random genomes at ~3.3 apart: at 3.0 every genome was its own species and training crashed
+initial_connection = "partial_nodirect 0.05"

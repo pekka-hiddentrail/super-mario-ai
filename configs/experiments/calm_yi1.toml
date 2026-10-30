@@ -1,0 +1,29 @@
+# Smaller numbers: biases (and then weights) start close to 0 and are capped at +-1, so a button is not decided by its bias alone.
+# Same seeds, 8 hidden nodes and 0.5% starting links as links-0.5pct in sparse_yi1, which is the control (default ranges: spread 1.0, cap 30).
+# Run: scripts/calm_yi1.sh   (log /tmp/calm_yi1.log)
+name = "calm-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2]
+generations = 6
+pop_size = 100
+workers = 12
+
+[[variant]]
+name = "bias1"
+[variant.neat]
+num_hidden = 8
+initial_connection = "partial_direct 0.005"
+compatibility_threshold = 4.5
+bias_init_stdev = 0.3
+bias_limit = 1.0
+
+[[variant]]
+name = "bias1-weight1"
+[variant.neat]
+num_hidden = 8
+initial_connection = "partial_direct 0.005"
+compatibility_threshold = 4.5
+bias_init_stdev = 0.3
+bias_limit = 1.0
+weight_init_stdev = 0.5
+weight_limit = 1.0

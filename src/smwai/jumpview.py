@@ -114,7 +114,7 @@ def _land(ram, state, x_speed, vy0, hold, blocks=(), ceilings=False, walls=False
     return None
 
 
-def reach_grid(ram, state, view, ride=False, ceilings=False, fixed=False, predict=False):
+def reach_grid(ram, state, view, ride=False, ceilings=False, fixed=False, predict=False, swing=False, anchor=None, t0=0, riding=None):
     """Where can Mario land? A window grid like the solid grid (rows up..down, columns left..right around Mario's tile): each cell
     that is the tile some jump would come down on gets a count of the arcs that land there (1-3). On the ground the arcs are
     button A and B with holds REACH_HOLDS from the speed he has now, from full run speed to the right and to the left; in the air
@@ -122,9 +122,12 @@ def reach_grid(ram, state, view, ride=False, ceilings=False, fixed=False, predic
     network decides whether and when."""
     left, right, up, down = R.window(view)
     grid = np.zeros((up + down + 1, left + right + 1), dtype=np.int8)
-    _, blocks = _scene(state, ride, fixed)
-    moving = _moving(state, ride, predict)
-    here_x, here_y = (state.x + 8) // 16, state.y // 16
+    _, blocks = _scene(state, ride, fixed, swing)
+    if riding is None:
+        riding = R.standing_on_swing(state) is not None
+    moving = _moving(state, ride, predict, swing, t0, riding)
+    ref = anchor or state                                # the grid is laid out around `anchor` (Mario now), the arcs start at `state`
+    here_x, here_y = (ref.x + 8) // 16, ref.y // 16
     if state.in_air:
         arcs = [(state.x_speed, state.y_speed, hold) for hold in (1, 25)]
     else:
@@ -170,16 +173,16 @@ def _walk(ram, state, enemies, blocks, walls, moving=None):
     return [1, hit, min(len(coins), 3), _clip((cx - cx0) / 16, -15, 15), _clip((feet - feet0) / 16, -8, 8)]
 
 
-def _moving(state, ride, predict):
-    """Platform blocks for each of the next 100 frames (index 0 = now), or None when platforms are taken as they are now."""
-    return [R.platform_blocks(state, t) for t in range(101)] if ride and predict else None
+def _moving(state, ride, predict, swing=False, t0=0, riding=False):
+    """Platform blocks for each of the next 100 frames (index 0 = t0 frames from now), or None when platforms are taken as they are now."""
+    return [R.platform_blocks(state, t0 + t, swing, riding) for t in range(101)] if ride and (predict or swing or t0) else None
 
 
-def run_features(ram, state, ride=False, ceilings=False, fixed=False, predict=False):
+def run_features(ram, state, ride=False, ceilings=False, fixed=False, predict=False, swing=False):
     """35 values in the order of run_names(): the 'keep running' option, then the jump options as if Mario ran at full speed
     (what a run-up would make possible)."""
-    enemies, blocks = _scene(state, ride, fixed)
-    moving = _moving(state, ride, predict)
+    enemies, blocks = _scene(state, ride, fixed, swing)
+    moving = _moving(state, ride, predict, swing, 0, R.standing_on_swing(state) is not None)
     out = _walk(ram, state, enemies, blocks, fixed, moving)
     fast = dataclasses.replace(state, x_speed=RUN_SPEED)
     for button in BUTTONS_MODELLED:
@@ -189,16 +192,16 @@ def run_features(ram, state, ride=False, ceilings=False, fixed=False, predict=Fa
     return np.array(out, dtype=np.int8)
 
 
-def _scene(state, ride, fixed):
+def _scene(state, ride, fixed, swing=False):
     enemies = [(s.x, s.y) for s in state.sprites if s.kind == "enemy" and not (ride and s.number in R.PLATFORM_SPRITES)
                and not (fixed and s.number in R.HARMLESS_SPRITES)]
-    return enemies, (R.platform_blocks(state) if ride else ())
+    return enemies, (R.platform_blocks(state, 0, swing) if ride else ())
 
 
-def features(ram, state, ride=False, ceilings=False, fixed=False, predict=False):
+def features(ram, state, ride=False, ceilings=False, fixed=False, predict=False, swing=False):
     """The 30 jump-option values, in the order of names(). ride=True: moving platforms are ground, not enemies."""
-    enemies, blocks = _scene(state, ride, fixed)
-    moving = _moving(state, ride, predict)
+    enemies, blocks = _scene(state, ride, fixed, swing)
+    moving = _moving(state, ride, predict, swing, 0, R.standing_on_swing(state) is not None)
     out = []
     for button in BUTTONS_MODELLED:
         for hold in HOLDS:
@@ -210,3 +213,24 @@ def features(ram, state, ride=False, ceilings=False, fixed=False, predict=False)
 def motion_scalars(state):
     """x speed (units of 8), y speed (units of 16), on-ground flag: small ints."""
     return [int(state.x_speed) // 8, int(state.y_speed) // 16, 0 if state.in_air else 1]
+
+
+WAITS = (30, 60, 90, 120)       # frames Mario would stand on the rotating platform before jumping, in the reach_wait grid
+
+
+def reach_wait_grid(ram, state, view, ride=False, ceilings=False, fixed=False, predict=False, swing=False):
+    """While Mario stands on the rotating platform: the cells a jump would land on if he waited first, as the number of the shortest wait
+    (1..4 = WAITS) after which some jump lands there; cells reachable right now are left at 0. All zeros elsewhere (and cheap)."""
+    left, right, up, down = R.window(view)
+    grid = np.zeros((up + down + 1, left + right + 1), dtype=np.int8)
+    sp = R.standing_on_swing(state) if swing else None
+    if sp is None:
+        return grid
+    now = reach_grid(ram, state, view, ride, ceilings, fixed, predict, swing) > 0
+    x0, y0 = R.swing_position(sp, 0, True)
+    for k, wait in enumerate(WAITS, 1):
+        x1, y1 = R.swing_position(sp, wait, True)
+        moved = dataclasses.replace(state, x=int(round(state.x + x1 - x0)), y=int(round(state.y + y1 - y0)), x_speed=0, y_speed=0, in_air=False)
+        later = reach_grid(ram, moved, view, ride, ceilings, fixed, predict, swing, anchor=state, t0=wait, riding=True) > 0
+        grid[later & ~now & (grid == 0)] = k
+    return grid

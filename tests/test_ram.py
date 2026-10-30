@@ -172,3 +172,43 @@ def test_room_signature_ignores_block_hits_and_coins():
     assert R.room_signature(w) == base
     w[R.MAP16_HIGH + 60] = 1                  # a different room has different geometry
     assert R.room_signature(w) != base
+
+
+def test_swing_model_follows_the_measured_motion():
+    from smwai import ram as R
+    n = len(R.SWING_TABLE)
+    assert R.SWING_TABLE[0] == 384 and abs(R.SWING_TABLE[-1] - 1407) <= 2 and 500 <= n <= 520      # two turns, 512 per turn, about 508 frames
+    assert all(a <= b for a, b in zip(R.SWING_TABLE, R.SWING_TABLE[1:]))                         # one half cycle only goes one way
+    sp = R.Sprite(x=472, y=264, number=R.SWING_SPRITE, is_item=False, ext=384)
+    x0, y0 = R.swing_position(sp)                                   # idle: upright, 80 px above the pivot
+    assert (round(x0), round(y0)) == (472 - 114, 264 - 16 - 80)
+    assert R.swing_position(sp, 300) == (x0, y0)                    # nobody on it: it stays
+    xr, yr = R.swing_position(sp, 100, riding=True)                 # standing on it: it turns (clockwise: to the right, then down)
+    assert xr > x0 + 40
+    xb, yb = R.swing_position(sp, 250, riding=True)                 # a quarter turn later it has gone round the bottom: the pivot is at y 248
+    assert yb > 248 + 20 or xb < x0
+    xt, yt = R.swing_position(sp, n - 1, riding=True)               # end of the half cycle: two turns done, upright again
+    assert abs(xt - x0) < 3 and abs(yt - y0) < 3
+    xb2, yb2 = R.swing_position(sp, 2 * (n - 1), riding=True)       # and back after the full cycle
+    assert abs(xb2 - x0) < 3 and abs(yb2 - y0) < 3
+    fwd = R.Sprite(x=472, y=264, number=R.SWING_SPRITE, is_item=False, ext=900, dext=2.0)
+    back = R.Sprite(x=472, y=264, number=R.SWING_SPRITE, is_item=False, ext=900, dext=-2.0)
+    assert R.swing_angle(fwd, 20) > 900 > R.swing_angle(back, 20)  # the same angle, the other direction
+    assert R.swing_angle(fwd, 2 * (n - 1)) == R.swing_angle(fwd, 0)
+    blocks = R.platform_blocks(R.read_state(np.zeros(0x20000, dtype=np.uint8)), 0, swing=True)
+    assert blocks == []                                             # no platform sprite: no blocks
+
+
+def test_standing_on_the_rotating_platform_is_detected():
+    from smwai import ram as R
+    sp = R.Sprite(x=472, y=264, number=R.SWING_SPRITE, is_item=False, ext=384)
+    cx, sy = R.swing_position(sp)
+    st = R.read_state(np.zeros(0x20000, dtype=np.uint8))
+    st.sprites = [sp]
+    st.x, st.y, st.in_air = int(cx) - 8, int(sy) - 32, False
+    assert R.standing_on_swing(st) is sp
+    st.in_air = True
+    assert R.standing_on_swing(st) is None
+    st.in_air, st.x = False, st.x + 100
+    assert R.standing_on_swing(st) is None
+    assert len(R.platform_blocks(st, 0, swing=True)) == 4 and len(R.platform_blocks(st, 0)) == 1

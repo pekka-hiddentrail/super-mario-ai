@@ -245,3 +245,17 @@ def test_reach_map_adds_one_grid_to_the_inputs():
     assert n_inputs(more) == n_inputs(base) + 14 * 16
     assert input_layout(more)[-1] == ("reach", "grid")
     assert EnvConfig().reach_map is False
+
+
+def test_reach_wait_grid_is_empty_unless_standing_on_the_rotating_platform_and_adds_the_swing_inputs():
+    from smwai.env import EnvConfig, input_layout, n_inputs
+    w = wram()
+    flat_level(w)
+    st = state_at(w, 100, 24 * 16 - 32)
+    view = (4, 9, 12, 3)
+    g = jumpview.reach_wait_grid(w, st, view, ride=True, fixed=True, swing=True)
+    assert g.shape == (12 + 3 + 1, 4 + 9 + 1) and not g.any()                 # not on the platform: nothing
+    base = EnvConfig(inputs="ride", window=[4, 9, 12, 3], reach_map=True)
+    swing = EnvConfig(inputs="ride", window=[4, 9, 12, 3], reach_map=True, swing_model=True)
+    assert n_inputs(swing) == n_inputs(base) + 16 * 14 and input_layout(swing)[-1] == ("reach_wait", "grid")
+    assert EnvConfig().swing_model is False and n_inputs(EnvConfig(inputs="ride", swing_model=True)) == n_inputs(EnvConfig(inputs="ride"))

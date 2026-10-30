@@ -12,8 +12,10 @@ from PIL import Image, ImageDraw
 from smwai import ram as R
 from smwai.env import BUTTONS, EnvConfig, SmwEnv
 
-state_file, out_state, out_mp4 = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
-watch = int(sys.argv[4]) if len(sys.argv) > 4 else 300
+args = [a for a in sys.argv[1:] if not a.startswith("--table=")]
+table_out = next((Path(a[8:]) for a in sys.argv[1:] if a.startswith("--table=")), None)
+state_file, out_state, out_mp4 = Path(args[0]), Path(args[1]), Path(args[2])
+watch = int(args[3]) if len(args) > 3 else 300
 SWING = 0x5F
 env = SmwEnv(EnvConfig(levels=["YoshiIsland3"], frame_skip=1, stuck_frames=10**6, max_frames=10**6))
 env.reset()
@@ -77,6 +79,8 @@ TABLES = {"$C2": 0xC2, "$151C": 0x151C, "$1528": 0x1528, "$1534": 0x1534, "$1540
           "$1594": 0x1594, "$15AC": 0x15AC, "$15C4": 0x15C4, "$15D0": 0x15D0, "$15F6": 0x15F6, "$1602": 0x1602, "$160E": 0x160E, "$1626": 0x1626, "$163E": 0x163E}
 slot = [i for i in range(12) if int(R.wram(env._env.unwrapped.get_ram())[0x9E + i]) == SWING][0]
 tabs = []
+angles = []
+sps = []
 rows = []
 for f in range(watch):
     if f == 600:
@@ -86,6 +90,8 @@ for f in range(watch):
     rows.append((f + 1, swing(st), st.x, st.y, int(st.in_air), int(on_block(st)), st.lives))
     wr = R.wram(env._env.unwrapped.get_ram())
     tabs.append([int(wr[a + slot]) for a in TABLES.values()])
+    angles.append(int(wr[0x1528 + slot]) << 8 | int(wr[0x151C + slot]))
+    sps.append(next((s for s in st.sprites if s.number == SWING), None))
 print("frame after landing | block (x, y) | Mario x y air on-block lives")
 for r in rows[:: max(1, watch // 30)][:10]:
     print(f"{r[0]:5d} | {r[1]} | {r[2]} {r[3]} {r[4]} {r[5]} {r[6]}")
@@ -119,3 +125,33 @@ for i, fr in enumerate(env.capture or []):
     w.append_data(np.asarray(img))
 w.close()
 print("video:", out_mp4)
+
+if table_out is not None:
+    # one half cycle of the angle value, frame by frame: from a lower turning point to the next upper one (the swing is symmetrical)
+    turning = [i for i in range(8, len(angles) - 8) if angles[i] == min(angles[i - 8:i + 9]) or angles[i] == max(angles[i - 8:i + 9])]
+    marks = [turning[0]] + [b for a, b in zip(turning, turning[1:]) if b - a > 100]
+    lows = [i for i in marks if angles[i] < 700]
+    highs = [i for i in marks if angles[i] > 1000]
+    start = next(i for i in lows if any(h > i for h in highs))
+    end = next(h for h in highs if h > start)
+    import json
+
+    half = angles[start:end + 1]
+    table_out.write_text(json.dumps({"description": "angle value of the rotating platform ($1528:$151C), one frame per entry, from the lower to the upper turning point",
+                                     "frames": len(half) - 1, "values": half}))
+    print(f"table: {len(half)} frames, from {half[0]} to {half[-1]} (turning points at frames {marks})")
+
+# How well does the model (ram.swing_angle / swing_position, from the angle value and its direction) predict what the platform did next?
+if len(sps) > 600 and all(sps):
+    print("prediction error of the angle value (units, 512 = one turn) and of the platform position (px), from many starting frames:")
+    for k in (15, 30, 60, 120, 240):
+        ea, ep = [], []
+        for f in range(40, len(sps) - k - 1, 7):
+            now, later = sps[f], sps[f + k]
+            ea.append(abs(R.swing_angle(now, k, True) - later.ext))
+            (px, py), (qx, qy) = R.swing_position(now, k, True), R.swing_position(later, 0, True)
+            ep.append(math.hypot(px - qx, py - qy))
+        print(f"  {k:4d} frames ahead: angle error mean {np.mean(ea):6.1f} max {np.max(ea):5.0f} | position error mean {np.mean(ep):5.1f} px max {np.max(ep):5.1f} px")
+    off = [(rows[i][2] + 8 - R.swing_position(sps[i])[0], rows[i][3] + 32 - R.swing_position(sps[i])[1]) for i in range(0, len(sps), 5)]
+    print(f"Mario's feet against the model's platform surface: x offset mean {np.mean([o[0] for o in off]):+.1f} (spread {np.std([o[0] for o in off]):.1f}), "
+          f"y offset mean {np.mean([o[1] for o in off]):+.1f} (spread {np.std([o[1] for o in off]):.1f}) px")

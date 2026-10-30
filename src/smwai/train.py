@@ -87,7 +87,7 @@ def eval_genome_full(genome, config, death_map=None):
     t0 = time.time()
     total, _, info = run_episode(genome, config)
     return total, info["frames"], {"seconds": round(time.time() - t0, 1), "print": novelty.fingerprint(info["cells"], info.get("events", [])),
-                                   "end": [info["x"], info["y"], bool(info.get("cleared"))]}
+                                   "end": [info["x"], info["y"], bool(info.get("cleared"))], "takeoff": info.get("takeoff")}
 
 
 class PoolEvaluator:
@@ -123,7 +123,8 @@ class RunReporter(neat.reporting.BaseReporter):
         self.adapt = adapt or {}
         self.nov = novelty_cfg or {}
         self.live = live_cfg or {}
-        self.deaths = deathmap.DeathMap() if death_inputs else None
+        self.deaths = deathmap.DeathMap()                  # always kept (takeoffs.jsonl); the networks read it only with death/takeoff inputs
+        self.memory_inputs = death_inputs
         self.archive = novelty.NoveltyArchive(self.nov.get("k", 5), self.nov.get("archive_max", 300), self.nov.get("add_per_gen", 3))
         self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
         self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
@@ -234,11 +235,15 @@ class RunReporter(neat.reporting.BaseReporter):
     def _remember_deaths(self, population):
         """Add where this generation's best runs ended to the death map the next generation's networks can read."""
         behaviour = self.stats.get("behaviour")
-        if self.deaths is None or not behaviour:
+        if not behaviour:
             return
         raw = {gid: g.fitness for gid, g in population.items() if gid in behaviour}
-        self.deaths.update({gid: behaviour[gid]["end"] for gid in raw}, raw)
-        self.stats["death_map"] = self.deaths.export()
+        kept = self.deaths.update({gid: behaviour[gid]["end"] for gid in raw}, raw, {gid: behaviour[gid].get("takeoff") for gid in raw})
+        if kept:                                       # [x, y, buttons mask, jump hold steps, run, fitness] of the fatal takeoffs
+            with open(self.dir / "takeoffs.jsonl", "a") as f:
+                f.write(json.dumps({"generation": self.generation, "takeoffs": kept}) + "\n")
+        if self.memory_inputs:
+            self.stats["death_map"] = self.deaths.export()
 
     def _novelty(self, population, best):
         """Score the generation's behaviour novelty and map coverage; with weight > 0 also turn fitness into the selection score."""
@@ -286,7 +291,8 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
         evaluator = HybridEvaluator(n_workers, stats, cfg.env, cfg.hybrid, run_dir / "hybrid.jsonl")
     else:
         evaluator = PoolEvaluator(n_workers, stats)
-    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty, cfg.env.death_inputs, cfg.live))
+    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty,
+                                  cfg.env.death_inputs or cfg.env.takeoff_inputs, cfg.live))
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:

@@ -44,6 +44,7 @@ class EnvConfig:
     window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
     inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options | explore: + pipes
     death_inputs: bool = False     # + four inputs from the death map: where earlier attempts died or got stuck (deathmap.py)
+    takeoff_inputs: bool = False   # + four inputs from where the best runs took off for their fatal fall, and how (deathmap.py)
     jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
                                    # values stay as they were at takeoff while Mario is in the air
     run_options: bool = False      # + 'keep running' and the jump options as from full run speed (jumpview.run_names): 35 inputs
@@ -86,7 +87,8 @@ def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
     return (_base_layout(cfg) + ([(name, "scalar") for name in jumpview.run_names()] if cfg.run_options else [])
             + ([(name, "scalar") for name in PLATFORM_INPUTS] if cfg.predict_platforms else [])
-            + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else []))
+            + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else [])
+            + ([(name, "scalar") for name in deathmap.TAKEOFF_NAMES] if cfg.takeoff_inputs else []))
 
 
 def _base_layout(cfg):
@@ -132,6 +134,8 @@ def build_observation(ram, state, cfg, deaths=None, memory=None):
         obs = np.concatenate([obs, platform_inputs(state)])
     if cfg.death_inputs:
         obs = np.concatenate([obs, np.array(deathmap.features(deaths, state.x), dtype=np.int8)])
+    if cfg.takeoff_inputs:
+        obs = np.concatenate([obs, np.array(deathmap.takeoff_features(deaths, state.x), dtype=np.int8)])
     return obs
 
 
@@ -178,7 +182,8 @@ class SmwEnv(gym.Env):
         self.capture = None            # set to a list to collect every emulator frame (video)
         self.events = []
         self._memory = {}
-        self.death_map = None          # DeathMap.export(): set by the trainer (and by replays) when cfg.death_inputs is on
+        self._takeoff = None
+        self.death_map = None         # DeathMap.export(): set by the trainer (and by replays) when cfg.death_inputs is on
         self.best_ground_y = 0
         self._pipes = set()
         self.room_max, self.room_sig, self._room_pending = {}, None, False
@@ -211,6 +216,7 @@ class SmwEnv(gym.Env):
         for _ in range(2):  # let the first frames settle so RAM is valid
             self.frame = self._env.step(np.zeros(12, dtype=np.int8))[0]
         self._memory = {}
+        self._takeoff = None
         self.state, grid = self._read()
         self.max_x = self.state.x
         self.frames = 0
@@ -241,6 +247,7 @@ class SmwEnv(gym.Env):
             if self.capture is not None:          # video recording: keep every emulator frame
                 self.capture.append(self.frame.copy())
         self.state, grid = self._read(prev)
+        self._track_takeoff(prev, action)
         self._track_room(prev)
         rc = self.cfg.reward
         reward = -rc.time_penalty * self.cfg.frame_skip
@@ -296,9 +303,28 @@ class SmwEnv(gym.Env):
         truncated = self.stuck >= self.cfg.stuck_frames or self.frames >= self.cfg.max_frames
         info = self._info()
         info.update(died=died, cleared=cleared)
+        if died and self._takeoff is not None:
+            t = self._takeoff
+            info["takeoff"] = [t["x"], t["y"], t["mask"], t["hold"], t["run"]]      # the jump (or walk off a ledge) that ended in death
         if terminated or truncated:
             info["events"] = list(self.events)      # [frame, kind, x, y] for the path map
         return grid, float(reward), terminated, truncated, info
+
+    def _track_takeoff(self, prev, action):
+        """Remember the last takeoff: where Mario left the ground, what was pressed, and for how many steps jump (A or B) stayed held."""
+        st = self.state
+        jump = bool(action[BUTTONS.index("A")] or action[BUTTONS.index("B")])
+        if not st.in_air:
+            self._takeoff = None                          # landed (or never left): nothing to blame
+        elif not prev.in_air:
+            mask = int(sum(1 << i for i, on in enumerate(action) if on))
+            self._takeoff = {"x": prev.x, "y": prev.y, "mask": mask, "hold": int(jump), "open": jump,
+                             "run": int(bool(action[BUTTONS.index("Y")]))}
+        elif self._takeoff is not None and self._takeoff["open"]:
+            if jump:
+                self._takeoff["hold"] += 1
+            else:
+                self._takeoff["open"] = False
 
     def _track_room(self, prev):
         """With room_progress on, every room (main level, bonus room) keeps its own furthest x."""

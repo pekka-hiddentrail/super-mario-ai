@@ -119,6 +119,10 @@ def param_inputs(raw, prefix):
             raw["env"]["cancel_opposites"] = st.checkbox(
                 "Left+right and up+down cancel each other", value=bool(raw["env"].get("cancel_opposites", False)),
                 key=prefix + "cancel", help="Pressing both buttons of a pair presses neither.")
+            raw["env"]["takeoff_inputs"] = st.checkbox(
+                "Memory inputs: bad takeoffs of earlier generations", value=bool(raw["env"].get("takeoff_inputs", False)),
+                key=prefix + "takeoff", help="Four inputs: how far the nearest takeoff is where the best runs of recent generations took off for their fatal fall, "
+                                             "and how long jump was held / whether Y was held there. Every run records these takeoffs (takeoffs.jsonl) either way.")
             raw["env"]["room_progress"] = st.checkbox(
                 "Progress per room (pipes and bonus rooms)", value=bool(raw["env"].get("room_progress", False)),
                 key=prefix + "rooms", help="Each room keeps its own furthest x, so a bonus room is not a dead end.")

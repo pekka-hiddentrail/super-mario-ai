@@ -1,0 +1,27 @@
+# Takeoff memory on Yoshi's Island 3, seed 2 (the seed that died jumping into the pit at x ~530 in both long2 variants, which also
+# got there without the memory: baseline = the first 30 generations of exp-long2-yi3-upview-s2). Same setup as long2 upview plus
+# takeoff_inputs: four inputs from where the best runs of recent generations took off for their fatal fall.
+# Every run also writes takeoffs.jsonl; read it with scripts/takeoff_summary.py <run folder>.
+# Run: smwai experiment --spec configs/experiments/takeoff_yi3.toml
+name = "takeoff-yi3"
+base = "configs/yi3.toml"
+seeds = [2]
+generations = 30
+pop_size = 80
+workers = 12
+
+[[variant]]
+name = "takeoff"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+window = [4, 9, 12, 3]
+cancel_opposites = true
+jump_fixes = true
+takeoff_inputs = true
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

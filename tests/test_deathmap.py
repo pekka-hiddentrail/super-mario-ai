@@ -35,3 +35,52 @@ def test_opposite_buttons_cancel():
     out = cancel_opposites(a)
     assert not out[BUTTONS.index("LEFT")] and not out[BUTTONS.index("RIGHT")]
     assert out[BUTTONS.index("UP")] and out[BUTTONS.index("A")] and a[BUTTONS.index("LEFT")]    # the input is not changed
+
+
+def test_takeoff_table_and_features():
+    m = D.DeathMap(top_share=1.0)
+    kept = m.update({0: [320, 0, False], 1: [330, 0, False], 2: [100, 0, True]}, {0: 9, 1: 8, 2: 7},
+                    {0: [300, 0, 0, 6, 1], 1: [310, 0, 0, 10, 1], 2: [90, 0, 0, 3, 0]})
+    assert len(kept) == 2 and kept[0][:5] == [300, 0, 0, 6, 1] and kept[0][5] == 9.0      # the cleared run is no bad takeoff
+    out = m.export()
+    assert set(out["takeoff"]) == {"9"} and D.features(out, 320)[0] > 0                    # the takeoff table does not disturb the death features
+    assert D.takeoff_features(None, 300) == [0, 0, 0, 0]
+    here = D.takeoff_features(out, 300)
+    assert here[0] == 16 and here[2] == 8 and here[3] == 16                               # mean hold (6 + 10) / 2, always running
+    assert 0 < D.takeoff_features(out, 300 - 3 * D.BIN)[0] < 16
+    assert D.takeoff_features(out, 300 - 10 * D.BIN) == [0, 0, 0, 0] and D.takeoff_features(out, 500) == [0, 0, 0, 0]
+
+
+def test_takeoff_inputs_add_four_scalars():
+    base = EnvConfig(inputs="ride", death_inputs=True)
+    more = EnvConfig(inputs="ride", death_inputs=True, takeoff_inputs=True)
+    assert n_inputs(more) == n_inputs(base) + 4
+    assert [n for n, _ in input_layout(more)][-4:] == list(D.TAKEOFF_NAMES)
+
+
+def test_env_follows_the_last_takeoff():
+    import numpy as np
+    from types import SimpleNamespace as S
+    from smwai.env import BUTTONS, SmwEnv
+    env = SmwEnv(EnvConfig())
+
+    def act(*names):
+        a = np.zeros(len(BUTTONS), dtype=bool)
+        for n in names:
+            a[BUTTONS.index(n)] = True
+        return a
+
+    def step(prev_air, air, x, *names):
+        env.state = S(in_air=air, x=x, y=0)
+        env._track_takeoff(S(in_air=prev_air, x=x - 8, y=0), act(*names))
+
+    step(False, True, 108, "B", "Y", "RIGHT")            # takeoff: x is where Mario stood
+    step(True, True, 116, "B", "Y")
+    step(True, True, 124, "Y")                           # released: the hold stops counting
+    step(True, True, 132, "B", "Y")
+    t = env._takeoff
+    assert (t["x"], t["hold"], t["run"]) == (100, 2, 1)
+    step(True, False, 140)                               # landed: nothing to blame
+    assert env._takeoff is None
+    step(False, True, 148, "RIGHT")                      # walking off a ledge is a takeoff with no jump
+    assert env._takeoff["hold"] == 0 and env._takeoff["run"] == 0

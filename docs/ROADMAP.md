@@ -337,3 +337,11 @@ Rule: one change at a time, measured on at least three seeds and two or three le
 ## Later
 - Other levels and vertical levels (tile layout differs).
 - Live tuning for PPO runs.
+
+## Long Yoshi Island 3 tests and the takeoff memory
+
+- `long_yi3` (seed 4, 250 generations): upview reached x 2799 (fitness 3023, best at generation 242), predict stayed at x 533. Neither cleared.
+- `long2_yi3` (seeds 1 and 2, 120 generations each): upview x 1177 / 532, predict x 1169 / 529. Platform prediction made no difference on the same seed; the seed decides. Videos show the weak seeds dying by jumping into the pit, not getting stuck.
+- Takeoff record: every run now writes `takeoffs.jsonl` (position, buttons, jump hold and Y of the fatal takeoff of the top 25% of attempts); read it with `scripts/takeoff_summary.py`. `takeoff_inputs` adds four inputs from it (`bad_dist`, `bad_share`, `bad_hold`, `bad_run`).
+- `takeoff_yi3` (seed 2, 30 generations): no gain (x 470 vs 532). 95% of fatal takeoffs sit at x 224-287, running with a long jump hold. The takeoff-to-death distance (about 200 px) is larger than one jump, so the takeoff may include time on something the game does not count as ground; to be checked.
+- Open: colored pipes (red/yellow/purple/grey) are not in `PIPE_TILES`, and the checkpoint bar reward is not built; both need save states (`play_manual` F5 saved nothing last time).

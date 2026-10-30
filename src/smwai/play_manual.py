@@ -48,7 +48,9 @@ def main():
             if ev.type == pygame.KEYDOWN and ev.key == pygame.K_F5:
                 path = Path("states") / f"manual_{int(time.time())}.state"
                 path.write_bytes(env.unwrapped.em.get_state())
-                print("saved", path)
+                print("saved", path.resolve(), flush=True)
+                pygame.display.set_caption(f"SAVED {path.name}")
+                last_fps = time.time() + 3        # keep the caption for a few seconds
         pressed = pygame.key.get_pressed()
         action = np.zeros(len(buttons), dtype=np.int8)
         for key, name in KEYS.items():

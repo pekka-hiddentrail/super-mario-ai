@@ -83,3 +83,8 @@ def test_sprite_platforms_add_one_grid_group():
     assert n_inputs(cfg) == n_inputs(base) + 169
     ride = EnvConfig(inputs="ride", sprite_platforms=True)
     assert [n for n, _ in input_layout(ride)].count("platform") == 1      # the ride inputs have the grid already
+
+
+def test_big_coins_keep_the_input_count():
+    from smwai.env import EnvConfig, n_inputs
+    assert n_inputs(EnvConfig(inputs="collect", big_coins=True)) == n_inputs(EnvConfig(inputs="collect"))

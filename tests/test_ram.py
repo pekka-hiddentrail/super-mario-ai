@@ -256,3 +256,25 @@ def test_riding_platform_needs_the_flag_the_feet_and_the_extent():
     assert R.riding_platform(st) is None
     st.x, st.y = 1380, 208 - 80
     assert R.riding_platform(st) is None
+
+
+def test_big_coin_shows_in_the_coin_grid_only_when_asked():
+    w = make_wram()
+    st = R.read_state(w)
+    st.x, st.y = 0x100, 0x100
+    idx = lambda wx, wy: (wx // 256) * R.TILES_PER_PAGE + (wy // 16) * 16 + (wx % 256) // 16
+    w[R.MAP16_LOW + idx(0x108, 0x100)] = R.COIN_TILE
+    w[R.MAP16_LOW + idx(0x118, 0x100)] = 0x2D
+    w[R.MAP16_LOW + idx(0x118, 0x110)] = 0x2E
+    assert R.coin_grid(w, st).sum() == 1                    # as before: the ordinary coin only
+    g = R.coin_grid(w, st, big=True)
+    assert sorted(set(g.ravel())) == [0, 1, 2] and (g == 2).sum() == 2
+
+
+def test_flying_box_is_a_platform_with_the_flag():
+    sp = R.Sprite(x=573, y=309, number=0x83, is_item=False, vx=-0.7)
+    st = R.read_state(make_wram())
+    st.sprites, st.x, st.y = [sp], 560, 276
+    assert R.platform_blocks(st) == []
+    R.mark_platforms(st.sprites)
+    assert len(R.platform_blocks(st)) == 1 and R.sprite_grids(st, 6)[0].sum() == 0

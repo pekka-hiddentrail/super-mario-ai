@@ -49,6 +49,7 @@ class EnvConfig:
     swing_model: bool = False      # the rotating platform (sprite 0x5F) as the model has measured it: where it will be, standing on it is not 'stuck', a wait-and-jump reach grid
     reach_map: bool = False        # + a grid of the cells some jump would land on (jumpview.reach_grid): where Mario can get to from here
     sprite_platforms: bool = False  # the checkerboard and floating platforms (ram.PLATFORM_EXTENT) are ground, not enemies: a platform grid, jump arcs that land on them, riding one is not 'stuck'
+    big_coins: bool = False        # the big (Yoshi) coin shows in the coin grid (as 2; only the ordinary coin did)
     ride_motion: bool = False      # + two inputs: how Mario moves while standing, beyond his own speed (a moving platform carries him; no sprite model needed)
     takeoff_inputs: bool = False   # + four inputs from where the best runs took off for their fatal fall, and how (deathmap.py)
     jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
@@ -191,7 +192,7 @@ def _base_observation(ram, state, cfg, memory=None):
                                    skip_harmless=cfg.jump_fixes)
         parts = [R.solid_grid(ram, state, view(cfg)).ravel(), enemy.ravel(), item.ravel()]
         if collect:
-            parts.append(R.coin_grid(ram, state, view(cfg)).ravel())
+            parts.append(R.coin_grid(ram, state, view(cfg), cfg.big_coins).ravel())
         if cfg.inputs in ("explore", "ride", "ride2"):
             parts.append(R.pipe_grid(ram, state, view(cfg)).ravel())
         if cfg.inputs in ("ride", "ride2"):

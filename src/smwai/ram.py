@@ -54,9 +54,11 @@ RIDING = 0x1471           # non-zero while Mario stands on a platform sprite (1 
 # probe_platform_width.py): (left, right) of the surface in pixels from the sprite's x, uncertain by about 8 px. The sprite's y is the top of the surface.
 PLATFORM_EXTENT = {0x55: (-8, 80),    # checkerboard platform, moves sideways
                    0x57: (-4, 84),    # checkerboard platform, moves up and down
-                   0x5D: (-4, 52)}    # floating platform that sinks slowly while stood on
+                   0x5D: (-4, 52),    # floating platform that sinks slowly while stood on
+                   0x83: (0, 16)}     # the flying ? box: one block that flies a pattern and carries Mario (measured on Yoshi's Island 1)
 HARMLESS_SPRITES = {0xB9}  # message box (the speech-bubble block): solid and harmless, not an enemy
 COIN_TILE = 0x2B           # Map16 low byte of a coin block (high byte 0)
+BIG_COIN_TILES = (0x2D, 0x2E)   # the big (Yoshi) coin: two tiles, top and bottom; touching either one counts it (measured: scripts/probe_coin_tiles.py)
 MAP16_LOW = 0xC800
 PIPE_TILES = range(0x33, 0x40)   # Map16 0x133-0x13F: pipe pieces of every colour (colour is the palette, the tiles are the same; seen: 0x133/0x134 and 0x137/0x138 tops, 0x135/0x136 body, 0x13B-0x13F sideways pipe)
 N_SPRITES = 12
@@ -219,8 +221,8 @@ def solid_grid(ram, state, view=6):
     return grid
 
 
-def coin_grid(ram, state, view=6):
-    """Window grid centred on Mario: 1 where a coin tile is still uncollected."""
+def coin_grid(ram, state, view=6, big=False):
+    """Window grid centred on Mario: 1 where a coin tile is still uncollected; with big=True a big (Yoshi) coin tile is 2."""
     grid = np.zeros(grid_shape(view), dtype=np.int8)
     for row, col, wx, wy in _cells(state, view):
         tx, ty = (wx + 8) // 16, wy // 16
@@ -229,6 +231,8 @@ def coin_grid(ram, state, view=6):
         off = (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
         if MAP16_HIGH + off < len(ram) and ram[MAP16_LOW + off] == COIN_TILE and ram[MAP16_HIGH + off] == 0:
             grid[row, col] = 1
+        elif big and MAP16_HIGH + off < len(ram) and ram[MAP16_LOW + off] in BIG_COIN_TILES and ram[MAP16_HIGH + off] == 0:
+            grid[row, col] = 2
     return grid
 
 

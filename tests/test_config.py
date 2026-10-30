@@ -72,3 +72,14 @@ def test_bias_and_weight_ranges_are_settings():
     parser.read_string(cfg.neat_text())
     g = parser["DefaultGenome"]
     assert (g["bias_init_stdev"], g["bias_max_value"], g["bias_min_value"]) == ("0.3", "1.0", "-1.0")
+
+
+def test_sprite_platforms_add_one_grid_group():
+    from smwai.env import EnvConfig, input_layout, n_inputs
+    base = EnvConfig(inputs="collect")
+    cfg = EnvConfig(inputs="collect", sprite_platforms=True)
+    assert [n for n, _ in input_layout(cfg)][:5] == ["solid", "enemy", "item", "coin", "in_water"]
+    assert ("platform", "grid") in input_layout(cfg) and ("platform", "grid") not in input_layout(base)
+    assert n_inputs(cfg) == n_inputs(base) + 169
+    ride = EnvConfig(inputs="ride", sprite_platforms=True)
+    assert [n for n, _ in input_layout(ride)].count("platform") == 1      # the ride inputs have the grid already

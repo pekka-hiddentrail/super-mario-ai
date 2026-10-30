@@ -48,6 +48,7 @@ class EnvConfig:
     death_nodes: bool = False      # the best fatal takeoff of every generation leaves a node: a random nudge on the buttons near that spot (deathmap.py)
     swing_model: bool = False      # the rotating platform (sprite 0x5F) as the model has measured it: where it will be, standing on it is not 'stuck', a wait-and-jump reach grid
     reach_map: bool = False        # + a grid of the cells some jump would land on (jumpview.reach_grid): where Mario can get to from here
+    sprite_platforms: bool = False  # the checkerboard and floating platforms (ram.PLATFORM_EXTENT) are ground, not enemies: a platform grid, jump arcs that land on them, riding one is not 'stuck'
     ride_motion: bool = False      # + two inputs: how Mario moves while standing, beyond his own speed (a moving platform carries him; no sprite model needed)
     takeoff_inputs: bool = False   # + four inputs from where the best runs took off for their fatal fall, and how (deathmap.py)
     jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
@@ -91,13 +92,23 @@ def platform_inputs(state, swing=False):
 
 def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
-    return (_base_layout(cfg) + ([(name, "scalar") for name in jumpview.run_names()] if cfg.run_options else [])
+    return (_base_layout(cfg) + ([("platform", "grid")] if _extra_platform_grid(cfg) else [])
+            + ([(name, "scalar") for name in jumpview.run_names()] if cfg.run_options else [])
             + ([(name, "scalar") for name in PLATFORM_INPUTS] if cfg.predict_platforms else [])
             + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else [])
             + ([(name, "scalar") for name in deathmap.TAKEOFF_NAMES] if cfg.takeoff_inputs else [])
             + ([(name, "scalar") for name in RIDE_INPUTS] if cfg.ride_motion else [])
             + ([("reach", "grid")] if cfg.reach_map else [])
             + ([("reach_wait", "grid")] if cfg.reach_map and cfg.swing_model else []))
+
+
+def _extra_platform_grid(cfg):
+    """sprite_platforms adds its own platform grid unless the 'ride' inputs have one already."""
+    return cfg.sprite_platforms and cfg.inputs not in ("ride", "ride2")
+
+
+def _ride(cfg):
+    return cfg.inputs in ("ride", "ride2") or cfg.sprite_platforms
 
 
 def _base_layout(cfg):
@@ -130,11 +141,13 @@ def n_inputs(cfg):
 def build_observation(ram, state, cfg, deaths=None, memory=None):
     """Flat int8 vector in input_layout order; `deaths` is the death map (DeathMap.export()) when cfg.death_inputs is on."""
     obs = _base_observation(ram, state, cfg, memory)
+    if _extra_platform_grid(cfg):
+        obs = np.concatenate([obs, R.platform_grid(state, view(cfg), cfg.swing_model).ravel().astype(np.int8)])
     if cfg.run_options:
         if cfg.jump_fixes and state.in_air and memory is not None and "run" in memory:
             extra = memory["run"]
         else:
-            extra = jumpview.run_features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2",
+            extra = jumpview.run_features(ram, state, ride=_ride(cfg), ceilings=cfg.inputs == "ride2",
                                           fixed=cfg.jump_fixes, predict=cfg.predict_platforms, swing=cfg.swing_model)
             if memory is not None:
                 memory["run"] = extra
@@ -148,7 +161,7 @@ def build_observation(ram, state, cfg, deaths=None, memory=None):
     if cfg.ride_motion:
         obs = np.concatenate([obs, ride_motion(state, (memory or {}).get("prev"))])
     if cfg.reach_map:
-        ride = cfg.inputs in ("ride", "ride2")
+        ride = _ride(cfg)
         obs = np.concatenate([obs, jumpview.reach_grid(ram, state, view(cfg), ride=ride, ceilings=cfg.inputs == "ride2",
                                                        fixed=cfg.jump_fixes, predict=cfg.predict_platforms, swing=cfg.swing_model).ravel()])
         if cfg.swing_model:
@@ -189,7 +202,7 @@ def _base_observation(ram, state, cfg, memory=None):
             if cfg.jump_fixes and state.in_air and memory is not None and "jump" in memory:
                 parts.append(memory["jump"])                    # in the air the jump is under way: keep what the takeoff predicted
             else:
-                jumps = jumpview.features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2",
+                jumps = jumpview.features(ram, state, ride=_ride(cfg), ceilings=cfg.inputs == "ride2",
                                           fixed=cfg.jump_fixes, predict=cfg.predict_platforms, swing=cfg.swing_model)
                 if memory is not None:
                     memory["jump"] = jumps
@@ -237,6 +250,8 @@ class SmwEnv(gym.Env):
     def _read(self, prev=None):
         ram = R.wram(self._env.unwrapped.get_ram())
         st = R.read_state(ram)
+        if self.cfg.sprite_platforms:
+            R.mark_platforms(st.sprites)
         if prev is not None:
             R.annotate_motion(prev.sprites, st.sprites, self.cfg.frame_skip)      # platform speeds from the last step
         self._memory["prev"] = prev
@@ -340,6 +355,8 @@ class SmwEnv(gym.Env):
                 self.stuck = 0
         if st.pipe_timer > 0 or not st.in_level:
             self.stuck = 0                                    # no control while in a pipe or while a room loads: not 'stuck'
+        if self.cfg.sprite_platforms and (ride := R.riding_platform(st)) is not None and abs(ride.vx) + abs(ride.vy) > 0.2:
+            self.stuck = 0                                    # carried by a moving platform: waiting is not 'stuck'
         if self.cfg.swing_model and R.standing_on_swing(st) is not None:
             self.stuck = 0                                    # carried by the rotating platform (a lap takes 1012 frames): waiting is not 'stuck'
         died = self.state.dying or self.state.lives < prev.lives

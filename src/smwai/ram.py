@@ -49,6 +49,12 @@ NEUTRAL_SPRITES = {0x35}   # Yoshi
 BRIDGE_SPRITE = 0x5A       # turn-block bridge: 5 solid blocks that pull in to one and push out again (value at $151C: 0..32)
 SWING_SPRITE = 0x5F        # chain-hung block that carries Mario (sprite position = the block; geometry only roughly checked)
 PLATFORM_SPRITES = {BRIDGE_SPRITE, SWING_SPRITE}
+RIDING = 0x1471           # non-zero while Mario stands on a platform sprite (1 on the checkerboard/floating ones, 3 on the rotating one; measured)
+# Platform sprites that carry Mario with their own speed, with the surface as measured by dropping Mario on them (scripts/probe_ride_types.py,
+# probe_platform_width.py): (left, right) of the surface in pixels from the sprite's x, uncertain by about 8 px. The sprite's y is the top of the surface.
+PLATFORM_EXTENT = {0x55: (-8, 80),    # checkerboard platform, moves sideways
+                   0x57: (-4, 84),    # checkerboard platform, moves up and down
+                   0x5D: (-4, 52)}    # floating platform that sinks slowly while stood on
 HARMLESS_SPRITES = {0xB9}  # message box (the speech-bubble block): solid and harmless, not an enemy
 COIN_TILE = 0x2B           # Map16 low byte of a coin block (high byte 0)
 MAP16_LOW = 0xC800
@@ -109,8 +115,16 @@ class MarioState:
     yoshi_coins: int = 0
     bonus_stars: int = 0        # set when the goal bar is hit: 0 for a low hit, more the higher the bar was hit
     message: int = 0            # a message box is open (the text pops up and Mario cannot move)
+    riding: int = 0             # $1471: Mario stands on a platform sprite (0 = no)
     used_blocks: int = 0        # number of already-hit blocks in the level (rises on every block hit)
     sprites: list = field(default_factory=list)
+
+
+def mark_platforms(sprites):
+    """Sprites of the types in PLATFORM_EXTENT become kind 'platform': ground for Mario, not enemies (the env does this only with sprite_platforms on)."""
+    for sp in sprites:
+        if sp.number in PLATFORM_EXTENT:
+            sp.kind = "platform"
 
 
 def read_swing_angle(ram, slot):
@@ -163,7 +177,7 @@ def read_state(ram):
         x_speed=u8(ram, PLAYER_X_SPEED) - 256 if u8(ram, PLAYER_X_SPEED) > 127 else u8(ram, PLAYER_X_SPEED),
         y_speed=u8(ram, PLAYER_Y_SPEED) - 256 if u8(ram, PLAYER_Y_SPEED) > 127 else u8(ram, PLAYER_Y_SPEED),
         in_air=u8(ram, IN_AIR) != 0,
-        pipe_timer=u8(ram, PIPE_TIMER), pipe_action=u8(ram, PIPE_ACTION), rooms=u8(ram, ROOMS), message=u8(ram, MESSAGE),
+        pipe_timer=u8(ram, PIPE_TIMER), pipe_action=u8(ram, PIPE_ACTION), rooms=u8(ram, ROOMS), message=u8(ram, MESSAGE), riding=u8(ram, RIDING),
         sprites=read_sprites(ram))
 
 
@@ -246,7 +260,7 @@ def sprite_grids(state, view=6, legacy=True, skip_platforms=False, skip_harmless
         row = round((sp.y - state.y) / 16) + up
         if not (0 <= row < rows and 0 <= col < cols):
             continue
-        if skip_platforms and sp.number in PLATFORM_SPRITES:
+        if sp.kind == "platform" or (skip_platforms and sp.number in PLATFORM_SPRITES):
             continue
         if skip_harmless and sp.number in HARMLESS_SPRITES:
             continue
@@ -371,6 +385,22 @@ def standing_on_swing(state):
     return None
 
 
+def riding_platform(state):
+    """The platform sprite Mario stands on, by the game's own flag ($1471) and where his feet are: sprites of PLATFORM_EXTENT, the bridge and the rotating
+    platform. None when he is not standing on one."""
+    if not state.riding or state.in_air:
+        return None
+    for sp in state.sprites:
+        if sp.number == SWING_SPRITE:
+            if standing_on_swing(state) is sp:
+                return sp
+        elif sp.number == BRIDGE_SPRITE or sp.kind == "platform":
+            left, right = PLATFORM_EXTENT.get(sp.number, (-40, 40))
+            if sp.x + left - 8 <= state.x + 8 <= sp.x + right + 8 and abs(state.y + 32 - sp.y) <= 6:
+                return sp
+    return None
+
+
 def platform_blocks(state, t=0, swing=False, riding=False):
     """Solid 16x16 blocks (world x, y of the top-left corner) that belong to moving platforms, `t` frames from now when t > 0
     (bridge: bridge_ext; swing: constant velocity, which is zero until Mario stands on it). t = 0 is the present.
@@ -382,6 +412,9 @@ def platform_blocks(state, t=0, swing=False, riding=False):
             ext = int(bridge_ext(sp, t)) if t else sp.ext
             for off in {0, ext // 2, -(ext // 2), ext, -ext}:
                 blocks.append((sp.x + off, sp.y))
+        elif sp.kind == "platform":
+            left, right = PLATFORM_EXTENT[sp.number]
+            blocks += [(sp.x + left + 16 * k + sp.vx * t, sp.y + sp.vy * t) for k in range(-(-(right - left) // 16))]
         elif sp.number == SWING_SPRITE:
             if swing:
                 cx, sy = swing_position(sp, t, riding)
@@ -396,7 +429,7 @@ def nearest_platform(state, swing=False):
     swing=True: the rotating platform is where its model puts it, and its speed comes from the model."""
     best = None
     for sp in state.sprites:
-        if sp.number in PLATFORM_SPRITES:
+        if sp.number in PLATFORM_SPRITES or sp.kind == "platform":
             x, y = (swing_position(sp)[0] - 8, swing_position(sp)[1] - 32) if swing and sp.number == SWING_SPRITE else (sp.x, sp.y)
             d = abs(x - state.x) + abs(y - state.y)
             if best is None or d < best[0]:

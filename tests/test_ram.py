@@ -219,3 +219,40 @@ def test_message_box_flag():
     assert R.read_state(w).message == 0
     w[R.MESSAGE] = 2
     assert R.read_state(w).message == 2
+
+
+def test_riding_flag_is_read():
+    w = make_wram()
+    assert R.read_state(w).riding == 0
+    w[R.RIDING] = 3
+    assert R.read_state(w).riding == 3
+
+
+def test_generic_platforms_are_ground_not_enemies():
+    sps = [R.Sprite(x=1355, y=208, number=0x55, is_item=False, vx=0.5), R.Sprite(x=900, y=100, number=0x09, is_item=False)]
+    st = R.read_state(make_wram())
+    st.sprites, st.x, st.y = sps, 1360, 176
+    enemy, _ = R.sprite_grids(st, 6)
+    assert enemy.sum() == 1 and R.platform_blocks(st) == [] and R.nearest_platform(st) is None     # not marked: as before
+    R.mark_platforms(sps)
+    assert [s.kind for s in sps] == ["platform", "enemy"]
+    enemy, _ = R.sprite_grids(st, 6)
+    assert enemy.sum() == 0                                                                          # the platform is no enemy; the sprite far away is outside the view
+    blocks = R.platform_blocks(st)
+    assert len(blocks) == 6 and blocks[0][1] == 208 and blocks[0][0] == 1355 - 8
+    assert R.platform_blocks(st, 20)[0][0] == blocks[0][0] + 10                                    # moves with its speed
+    assert R.nearest_platform(st)[2] == 0.5
+
+
+def test_riding_platform_needs_the_flag_the_feet_and_the_extent():
+    sp = R.Sprite(x=1355, y=208, number=0x55, is_item=False)
+    R.mark_platforms([sp])
+    st = R.read_state(make_wram())
+    st.sprites, st.x, st.y, st.in_air, st.riding = [sp], 1380, 208 - 32, False, 1
+    assert R.riding_platform(st) is sp
+    st.riding = 0
+    assert R.riding_platform(st) is None
+    st.riding, st.x = 1, 1355 + 200
+    assert R.riding_platform(st) is None
+    st.x, st.y = 1380, 208 - 80
+    assert R.riding_platform(st) is None

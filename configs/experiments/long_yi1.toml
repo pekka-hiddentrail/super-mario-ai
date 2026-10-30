@@ -1,0 +1,17 @@
+# A long run on Yoshi's Island 1: 8 hidden nodes + jump-prediction inputs (the best setup so far), 30 genomes, 100 generations, seeds 1-3 one after the other.
+# Expected 1.5-2.5 hours in all. Videos only of the generations where the best run improved, then one long video per run.
+# Run: scripts/long_yi1.sh   (log /tmp/long_yi1.log)
+name = "long-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3]
+generations = 100
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "hidden8-physics"
+[variant.env]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+compatibility_threshold = 4.5

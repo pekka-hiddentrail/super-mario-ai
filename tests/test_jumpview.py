@@ -214,3 +214,34 @@ def test_platforms_are_predicted_forward():
     sprites = [R.Sprite(x=110, y=190, number=R.SWING_SPRITE, is_item=False, slot=0)]
     R.annotate_motion([R.Sprite(x=100, y=200, number=R.SWING_SPRITE, is_item=False, slot=0)], sprites, 4)
     assert (sprites[0].vx, sprites[0].vy) == (2.5, -2.5)
+
+
+def test_reach_grid_marks_the_ledge_a_jump_can_reach_and_not_a_wall_too_high():
+    from smwai.ram import window
+    w = wram()
+    flat_level(w)
+    for tx in range(9, 13):                                     # a ledge 2 tiles above the ground, 3 tiles ahead
+        w[R.MAP16_HIGH + (tx // 16) * R.TILES_PER_PAGE + 22 * 16 + tx % 16] = 1
+    for tx in range(20, 24):                                    # and a ledge 12 tiles up: out of any jump's reach
+        w[R.MAP16_HIGH + (tx // 16) * R.TILES_PER_PAGE + 12 * 16 + tx % 16] = 1
+    st = state_at(w, 100, 24 * 16 - 32)
+    view = (4, 9, 12, 3)
+    left, right, up, down = window(view)
+    g = jumpview.reach_grid(w, st, view)
+    assert g.shape == (up + down + 1, left + right + 1) and g.dtype == np.int8 and g.max() <= 3
+    here_col = left
+    ledge_row = up + 22 - st.y // 16                            # the ledge's tile row relative to Mario's top row
+    assert g[ledge_row, here_col + 3: here_col + 7].sum() > 0     # some jump lands on the near ledge
+    assert g[up + 12 - st.y // 16].sum() == 0                     # nothing lands on the ledge 12 tiles up
+    assert g[up + 24 - st.y // 16, here_col] > 0                  # a jump in place comes back down on the ground
+    air = state_at(w, 100, 24 * 16 - 100, x_speed=36, y_speed=-20, in_air=True)
+    assert jumpview.reach_grid(w, air, view).shape == g.shape      # in the air: only the arc that is under way
+
+
+def test_reach_map_adds_one_grid_to_the_inputs():
+    from smwai.env import EnvConfig, input_layout, n_inputs
+    base = EnvConfig(inputs="ride", window=[4, 9, 12, 3])
+    more = EnvConfig(inputs="ride", window=[4, 9, 12, 3], reach_map=True)
+    assert n_inputs(more) == n_inputs(base) + 14 * 16
+    assert input_layout(more)[-1] == ("reach", "grid")
+    assert EnvConfig().reach_map is False

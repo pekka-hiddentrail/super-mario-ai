@@ -80,6 +80,66 @@ def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=Fal
     return [-1, hit, min(len(coins), 3), 0, 0]
 
 
+REACH_HOLDS = (1, 5, 10, 15, 20, 25)         # button hold times of the arcs of the reach map (frames)
+
+
+def _land(ram, state, x_speed, vy0, hold, blocks=(), ceilings=False, walls=False, moving=None):
+    """Where does this arc come down? (x, feet y) of the point that enters the solid tile or platform, or None when it falls into a pit.
+    The same arc as _option, with the sideways speed given: no enemies, no coins."""
+    cx0, feet0 = state.x + 8, state.y + FEET
+    vy, dy, cx = vy0, 0.0, cx0
+    for t in range(100):
+        if moving:
+            blocks = moving[min(t + 1, len(moving) - 1)]
+        if walls:
+            nxt = cx + x_speed / 16
+            if x_speed and R.solid_at(ram, nxt + (7 if x_speed > 0 else -7), feet0 + dy - 16):
+                nxt = cx
+            cx = nxt
+        else:
+            cx = cx0 + (t + 1) * x_speed / 16
+        step = vy / 16
+        if ceilings and vy < 0:
+            head = feet0 + dy + step - FEET
+            if R.solid_at(ram, cx, head) or R.on_platform(blocks, cx, head):
+                vy, step = 0, 0.0
+        dy += step
+        feet = feet0 + dy
+        if feet > LEVEL_BOTTOM:
+            return None
+        if vy > 0 and (R.solid_at(ram, cx, feet) or R.on_platform(blocks, cx, feet)):
+            return cx, feet
+        gravity = physics.GRAVITY_HELD if (t + 1 < hold and vy < physics.HELD_LIMIT) else physics.GRAVITY_FREE
+        vy = min(vy + gravity, physics.TERMINAL)
+    return None
+
+
+def reach_grid(ram, state, view, ride=False, ceilings=False, fixed=False, predict=False):
+    """Where can Mario land? A window grid like the solid grid (rows up..down, columns left..right around Mario's tile): each cell
+    that is the tile some jump would come down on gets a count of the arcs that land there (1-3). On the ground the arcs are
+    button A and B with holds REACH_HOLDS from the speed he has now, from full run speed to the right and to the left; in the air
+    the arc from the current speeds, with the button let go now or held on. Only what the physics model says is possible: the
+    network decides whether and when."""
+    left, right, up, down = R.window(view)
+    grid = np.zeros((up + down + 1, left + right + 1), dtype=np.int8)
+    _, blocks = _scene(state, ride, fixed)
+    moving = _moving(state, ride, predict)
+    here_x, here_y = (state.x + 8) // 16, state.y // 16
+    if state.in_air:
+        arcs = [(state.x_speed, state.y_speed, hold) for hold in (1, 25)]
+    else:
+        arcs = [(speed, physics.takeoff_for(button, speed), hold) for speed in dict.fromkeys((state.x_speed, RUN_SPEED, -RUN_SPEED))
+                for button in BUTTONS_MODELLED for hold in REACH_HOLDS]
+    for speed, vy0, hold in arcs:
+        hit = _land(ram, state, speed, vy0, hold, blocks, ceilings, fixed, moving)
+        if hit is None:
+            continue
+        row, col = up + int(hit[1]) // 16 - here_y, left + int(hit[0]) // 16 - here_x
+        if 0 <= row < grid.shape[0] and 0 <= col < grid.shape[1]:
+            grid[row, col] = min(3, grid[row, col] + 1)
+    return grid
+
+
 def _walk(ram, state, enemies, blocks, walls, moving=None):
     """Keep running right without jumping: where does Mario end up after WALK_FRAMES? Same five values as a jump option."""
     speed = max(abs(state.x_speed), 24)

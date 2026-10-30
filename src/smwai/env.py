@@ -45,6 +45,7 @@ class EnvConfig:
     inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options | explore: + pipes
     death_inputs: bool = False     # + four inputs from the death map: where earlier attempts died or got stuck (deathmap.py)
     death_nodes: bool = False      # the best fatal takeoff of every generation leaves a node: a random nudge on the buttons near that spot (deathmap.py)
+    reach_map: bool = False        # + a grid of the cells some jump would land on (jumpview.reach_grid): where Mario can get to from here
     ride_motion: bool = False      # + two inputs: how Mario moves while standing, beyond his own speed (a moving platform carries him; no sprite model needed)
     takeoff_inputs: bool = False   # + four inputs from where the best runs took off for their fatal fall, and how (deathmap.py)
     jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
@@ -91,7 +92,8 @@ def input_layout(cfg):
             + ([(name, "scalar") for name in PLATFORM_INPUTS] if cfg.predict_platforms else [])
             + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else [])
             + ([(name, "scalar") for name in deathmap.TAKEOFF_NAMES] if cfg.takeoff_inputs else [])
-            + ([(name, "scalar") for name in RIDE_INPUTS] if cfg.ride_motion else []))
+            + ([(name, "scalar") for name in RIDE_INPUTS] if cfg.ride_motion else [])
+            + ([("reach", "grid")] if cfg.reach_map else []))
 
 
 def _base_layout(cfg):
@@ -141,6 +143,10 @@ def build_observation(ram, state, cfg, deaths=None, memory=None):
         obs = np.concatenate([obs, np.array(deathmap.takeoff_features(deaths, state.x), dtype=np.int8)])
     if cfg.ride_motion:
         obs = np.concatenate([obs, ride_motion(state, (memory or {}).get("prev"))])
+    if cfg.reach_map:
+        ride = cfg.inputs in ("ride", "ride2")
+        obs = np.concatenate([obs, jumpview.reach_grid(ram, state, view(cfg), ride=ride, ceilings=cfg.inputs == "ride2",
+                                                       fixed=cfg.jump_fixes, predict=cfg.predict_platforms).ravel()])
     return obs
 
 

@@ -124,6 +124,10 @@ def param_inputs(raw, prefix):
                 key=prefix + "deathnodes", help="Each generation the best fatal takeoff leaves a node: a random nudge (+-0.5) on 1 to all buttons near that spot "
                                                 "and height, on the ground. It halves every generation, or fades slowly (x0.85) while a top attempt passes through it, and leaves "
                                                 "after five generations (twenty at most). The summed nudge is capped at +-0.45 so the network keeps a say.")
+            raw["env"]["reach_map"] = st.checkbox(
+                "Reach map: where each jump would land", value=bool(raw["env"].get("reach_map", False)),
+                key=prefix + "reachmap", help="A grid like the solid grid: the tiles some jump (A or B, several hold times, from the speed Mario has, run speed right and left) would land on. "
+                                              "Computed with the jump physics; the network still decides.")
             raw["env"]["ride_motion"] = st.checkbox(
                 "Riding inputs: how Mario moves while standing", value=bool(raw["env"].get("ride_motion", False)),
                 key=prefix + "ridemotion", help="Two inputs: up/down and sideways movement beyond Mario's own speed while he stands, which is how a moving platform "

@@ -331,11 +331,14 @@ class SmwEnv(gym.Env):
         return grid, float(reward), terminated, truncated, info
 
     def decide(self, out):
-        """Network outputs (0..1) -> pressed buttons (above 0.5); with death_nodes, nodes near Mario's spot nudge the outputs while he is on the ground."""
+        """Network outputs (0..1) -> pressed buttons (above 0.5); with death_nodes, nodes near Mario's spot shift the outputs' logits while he is on the ground."""
         out = np.asarray(out, dtype=np.float64)
         nodes = (self.death_map or {}).get(deathmap.NODES) if self.cfg.death_nodes else None
         if nodes and not self.state.in_air:
-            out = out + np.array(deathmap.node_nudge(nodes, self.state.x, self.state.y))
+            nudge = np.array(deathmap.node_nudge(nodes, self.state.x, self.state.y))
+            if nudge.any():
+                p = np.clip(out, 1e-6, 1 - 1e-6)
+                return np.log(p / (1 - p)) + deathmap.NODE_LOGIT * nudge > 0
         return out > 0.5
 
     def _track_takeoff(self, prev, action):

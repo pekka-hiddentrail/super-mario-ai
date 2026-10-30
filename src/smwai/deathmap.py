@@ -95,7 +95,9 @@ NODE_MIN_WEIGHT = 0.04           # gone below this: five generations of halving 
 NODE_MAX_AGE = 20                # a node that keeps working still leaves after this many generations
 NODE_REACH_X = (-32, 8)          # applies from 32 px before the takeoff to 8 px after it ...
 NODE_REACH_Y = 48                # ... and within three tiles of its height, on the ground
-NODE_CAP = 0.45                  # the summed nudge on one button; outputs are 0..1 and pressed above 0.5, so 0.5 would override the network
+NODE_CAP = 0.45                  # the summed nudge on one button (see NODE_LOGIT)
+NODE_LOGIT = 12.0                # a nudge of 1.0 shifts the output's logit by this much: 0.45 -> +-5.4, which flips outputs between about 0.5% and 99.5%.
+                                 # (Trained networks sit at 0.00 / 1.00 most of the time, so a nudge added to the 0..1 output itself never flipped anything.)
 
 
 def random_nudge(rng=random):
@@ -130,11 +132,16 @@ class NodeMemory:
         return [{"x": x, "y": y, "w": round(w, 4), "n": [round(v, 3) for v in nudge]} for x, y, nudge, w, _age in self.nodes]
 
 
+def in_reach(nx, ny, x, y):
+    """Does a node at (nx, ny) apply to Mario at (x, y)?"""
+    return nx + NODE_REACH_X[0] <= x <= nx + NODE_REACH_X[1] and abs(y - ny) <= NODE_REACH_Y
+
+
 def node_nudge(nodes, x, y):
     """Summed nudge per button (list of 8) from the exported nodes that apply at Mario's position, limited to +-NODE_CAP."""
     total = [0.0] * N_BUTTONS
     for n in nodes or ():
-        if n["x"] + NODE_REACH_X[0] <= x <= n["x"] + NODE_REACH_X[1] and abs(y - n["y"]) <= NODE_REACH_Y:
+        if in_reach(n["x"], n["y"], x, y):
             for b in range(N_BUTTONS):
                 total[b] += n["w"] * n["n"][b]
     return [max(-NODE_CAP, min(NODE_CAP, v)) for v in total]

@@ -254,7 +254,11 @@ class RunReporter(neat.reporting.BaseReporter):
         top = sorted(raw, key=raw.get, reverse=True)[: max(1, int(len(raw) * self.deaths.top_share))]
         cells = [[(c // 64, c % 64) for c in (behaviour[gid].get("cells") or ())] for gid in top]
 
-        def passed(x, y):                         # a top attempt visited the node's area (same height band) and went on beyond it
+        fatal = [behaviour[gid]["takeoff"] for gid in top if behaviour[gid].get("takeoff")]
+
+        def passed(x, y):                         # a top attempt visited the node's area (same height band) and went on beyond it ...
+            if any(deathmap.in_reach(x, y, t[0], t[1]) for t in fatal):
+                return False                      # ... but not while attempts still take off from here and die (the node is still needed)
             cx, cy = x // 64, y // 64
             return any(any(a == cx and abs(b - cy) <= 1 for a, b in run) and any(a > cx for a, _ in run) for run in cells)
 

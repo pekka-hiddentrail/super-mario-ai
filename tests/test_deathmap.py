@@ -160,10 +160,27 @@ def test_env_decide_applies_nodes_on_the_ground_only():
     env.death_map = {"nodes": [{"x": 300, "y": 200, "w": 1.0, "n": [-0.5, 0.5, 0, 0, 0, 0, 0, 0]}]}
     out = [0.7, 0.3, 0.9, 0.2, 0.1, 0.1, 0.1, 0.1]
     env.state = S(in_air=False, x=300, y=200)
-    assert env.decide(out).tolist() == [False, True, True, False, False, False, False, False]   # 0.7-0.45 = 0.25 stops it, 0.3+0.45 = 0.75 presses
+    assert env.decide(out).tolist() == [False, True, True, False, False, False, False, False]   # 0.45 shifts the logit by 5.4: 0.7 stops, 0.3 presses
+    fairly = [0.99, 0.01, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0]                                # outputs inside about 0.5%-99.5% flip ...
+    assert env.decide(fairly).tolist() == [False, True, True, False, False, False, False, False]
+    sure = [0.999, 0.001, 0.9999, 0.0001, 0.0, 0.0, 0.0, 0.0]                          # ... a network that is surer than that keeps its say
+    assert env.decide(sure).tolist() == [True, False, True, False, False, False, False, False]
     env.state = S(in_air=True, x=300, y=200)
     assert env.decide(out).tolist() == [True, False, True, False, False, False, False, False]    # in the air: the plain network
     env.state = S(in_air=False, x=300, y=200)
     env.cfg.death_nodes = False
     assert env.decide(out).tolist() == [True, False, True, False, False, False, False, False]    # switch off: nothing changes
     assert EnvConfig().death_nodes is False
+
+
+def test_a_node_where_attempts_still_die_fades_fast_even_if_they_pass_it(tmp_path):
+    from smwai.novelty import cell_id
+    from smwai.train import RunReporter
+    rep = RunReporter(tmp_path / "run", None, {"frames": 0}, death_nodes=True)
+    rep.nodes.nodes = [[285, 352, [0.1] * 8, 1.0, 0], [150, 352, [0.1] * 8, 1.0, 0]]
+    run = sorted({cell_id(x, 352) for x in range(100, 560, 8)})             # an attempt that ran right through both spots and on to x 560
+    behaviour = {1: {"cells": run, "takeoff": [292, 352, 0, 5, 1]}, 2: {"cells": run, "takeoff": None}}
+    rep._update_nodes({1: 10.0, 2: 5.0}, behaviour, [])
+    weights = {n[0]: n[3] for n in rep.nodes.nodes}
+    assert weights[285] == 0.5                  # still where the best attempt takes off and dies: the node fails, passing it does not count
+    assert weights[150] == 0.85                 # attempts pass it and take off elsewhere: it works

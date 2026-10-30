@@ -1,0 +1,40 @@
+# Many seeds, few generations: does a setup get Mario up to the high platforms (lowest y under 100) on Yoshi's Island 3? Ten seeds, 10 generations,
+# population 60, base setup against the takeoff memory; about 2 minutes per run, 20 runs. Read it with scripts/seed_screen.py screen-yi3.
+# Run: scripts/screen_yi3.sh   (log /tmp/screen_yi3.log)
+name = "screen-yi3"
+base = "configs/yi3.toml"
+seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+generations = 10
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "base"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+window = [4, 9, 12, 3]
+cancel_opposites = true
+jump_fixes = true
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0
+
+[[variant]]
+name = "takeoff"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+window = [4, 9, 12, 3]
+cancel_opposites = true
+jump_fixes = true
+takeoff_inputs = true
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

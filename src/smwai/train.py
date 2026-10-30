@@ -48,7 +48,7 @@ def run_episode(genome, config, record=False):
     total, actions, path = 0.0, [], [[info["x"], info["y"]]]
     cells = {novelty.cell_id(info["x"], info["y"])}
     while True:
-        action = np.array(net.activate(obs.ravel().astype(np.float64))) > 0.5
+        action = env.decide(net.activate(obs.ravel().astype(np.float64)))
         if record:
             actions.append(_to_mask(action))
         obs, reward, term, trunc, info = env.step(action)
@@ -87,7 +87,8 @@ def eval_genome_full(genome, config, death_map=None):
     t0 = time.time()
     total, _, info = run_episode(genome, config)
     return total, info["frames"], {"seconds": round(time.time() - t0, 1), "print": novelty.fingerprint(info["cells"], info.get("events", [])),
-                                   "end": [info["x"], info["y"], bool(info.get("cleared"))], "takeoff": info.get("takeoff")}
+                                   "end": [info["x"], info["y"], bool(info.get("cleared"))], "takeoff": info.get("takeoff"),
+                                   "cells": sorted(info["cells"]) if _get_env().cfg.death_nodes else None}
 
 
 class PoolEvaluator:
@@ -117,14 +118,15 @@ class PoolEvaluator:
 class RunReporter(neat.reporting.BaseReporter):
     """Writes metrics.csv and records the best run of every generation."""
 
-    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None, novelty_cfg=None, death_inputs=False, live_cfg=None):
+    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None, novelty_cfg=None, death_inputs=False, live_cfg=None, death_nodes=False):
         self.dir = Path(run_dir)
         self.neat_cfg = neat_cfg
         self.adapt = adapt or {}
         self.nov = novelty_cfg or {}
         self.live = live_cfg or {}
         self.deaths = deathmap.DeathMap()                  # always kept (takeoffs.jsonl); the networks read it only with death/takeoff inputs
-        self.memory_inputs = death_inputs
+        self.memory_inputs = death_inputs or death_nodes
+        self.nodes = deathmap.NodeMemory() if death_nodes else None
         self.archive = novelty.NoveltyArchive(self.nov.get("k", 5), self.nov.get("archive_max", 300), self.nov.get("add_per_gen", 3))
         self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
         self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
@@ -242,8 +244,21 @@ class RunReporter(neat.reporting.BaseReporter):
         if kept:                                       # [x, y, buttons mask, jump hold steps, run, fitness] of the fatal takeoffs
             with open(self.dir / "takeoffs.jsonl", "a") as f:
                 f.write(json.dumps({"generation": self.generation, "takeoffs": kept}) + "\n")
+        if self.nodes is not None:
+            self._update_nodes(raw, behaviour, kept)
         if self.memory_inputs:
-            self.stats["death_map"] = self.deaths.export()
+            self.stats["death_map"] = {**self.deaths.export(), **({deathmap.NODES: self.nodes.export()} if self.nodes is not None else {})}
+
+    def _update_nodes(self, raw, behaviour, kept):
+        """Age the death nodes by what the top attempts did around them, and add this generation's: the best attempt's fatal takeoff."""
+        top = sorted(raw, key=raw.get, reverse=True)[: max(1, int(len(raw) * self.deaths.top_share))]
+        cells = [[(c // 64, c % 64) for c in (behaviour[gid].get("cells") or ())] for gid in top]
+
+        def passed(x, y):                         # a top attempt visited the node's area (same height band) and went on beyond it
+            cx, cy = x // 64, y // 64
+            return any(any(a == cx and abs(b - cy) <= 1 for a, b in run) and any(a > cx for a, _ in run) for run in cells)
+
+        self.nodes.update(kept[0] if kept else None, passed)
 
     def _novelty(self, population, best):
         """Score the generation's behaviour novelty and map coverage; with weight > 0 also turn fitness into the selection score."""
@@ -292,7 +307,7 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
     else:
         evaluator = PoolEvaluator(n_workers, stats)
     pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty,
-                                  cfg.env.death_inputs or cfg.env.takeoff_inputs, cfg.live))
+                                  cfg.env.death_inputs or cfg.env.takeoff_inputs, cfg.live, cfg.env.death_nodes))
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:

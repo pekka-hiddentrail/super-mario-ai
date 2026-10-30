@@ -57,11 +57,12 @@ def compute_replay(run_dir, generation, use_cache=True):
     graph = genome_graph(genome, neat_cfg)
     watch = graph["hidden"] + graph["outputs"]
     env = train._get_env()
+    env.death_map = json.loads((run_dir / "best" / f"gen_{generation:04d}.json").read_text()).get("death_map")
     obs, info = env.reset()
     steps, total = [], 0.0
     while True:
         out = net.activate(obs.ravel().astype(np.float64))
-        action = np.array(out) > 0.5
+        action = env.decide(out)
         steps.append({
             "frame": _jpeg(env.frame),
             "grid": "".join(chr(ord("a") + int(v) + 1) for v in obs.ravel()),  # -1..2 -> a..d

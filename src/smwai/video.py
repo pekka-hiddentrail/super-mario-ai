@@ -191,7 +191,7 @@ def _play_network(run_dir, generation, env):
     steps, total = [], 0.0
     while True:
         out = net.activate(obs.ravel().astype(np.float64))
-        action = np.array(out) > 0.5
+        action = env.decide(out)
         before = len(env.capture)
         steps.append({"obs": obs.ravel().copy(), "vals": {k: float(net.values.get(k, 0.0)) for k in watch},
                       "pressed": action, "x": info["x"], "before": before})

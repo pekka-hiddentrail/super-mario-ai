@@ -119,6 +119,11 @@ def param_inputs(raw, prefix):
             raw["env"]["cancel_opposites"] = st.checkbox(
                 "Left+right and up+down cancel each other", value=bool(raw["env"].get("cancel_opposites", False)),
                 key=prefix + "cancel", help="Pressing both buttons of a pair presses neither.")
+            raw["env"]["death_nodes"] = st.checkbox(
+                "Death nodes: random nudges on the buttons where the best attempt died", value=bool(raw["env"].get("death_nodes", False)),
+                key=prefix + "deathnodes", help="Each generation the best fatal takeoff leaves a node: a random nudge (+-0.5) on 1 to all buttons near that spot "
+                                                "and height, on the ground. It halves every generation, or fades slowly (x0.85) while a top attempt passes through it, and leaves "
+                                                "after five generations (twenty at most). The summed nudge is capped at +-0.45 so the network keeps a say.")
             raw["env"]["ride_motion"] = st.checkbox(
                 "Riding inputs: how Mario moves while standing", value=bool(raw["env"].get("ride_motion", False)),
                 key=prefix + "ridemotion", help="Two inputs: up/down and sideways movement beyond Mario's own speed while he stands, which is how a moving platform "

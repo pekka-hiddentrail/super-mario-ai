@@ -345,3 +345,11 @@ Rule: one change at a time, measured on at least three seeds and two or three le
 - Takeoff record: every run now writes `takeoffs.jsonl` (position, buttons, jump hold and Y of the fatal takeoff of the top 25% of attempts); read it with `scripts/takeoff_summary.py`. `takeoff_inputs` adds four inputs from it (`bad_dist`, `bad_share`, `bad_hold`, `bad_run`).
 - `takeoff_yi3` (seed 2, 30 generations): no gain (x 470 vs 532). 95% of fatal takeoffs sit at x 224-287, running with a long jump hold. The takeoff-to-death distance (about 200 px) is larger than one jump, so the takeoff may include time on something the game does not count as ground; to be checked.
 - Open: colored pipes (red/yellow/purple/grey) are not in `PIPE_TILES`, and the checkpoint bar reward is not built; both need save states (`play_manual` F5 saved nothing last time).
+
+## Death nodes (`death_nodes`, built, not tested yet)
+- Each generation the best fatal takeoff leaves a node: its position (x, y) and a random nudge on 1 to all of the 8 buttons (count from a bell curve around 4.5, values random in [-0.5, 0.5], size at least 0.1). Not tied to what the genome pressed.
+- Near a node (32 px before to 8 px after its x, within 3 tiles of its y, Mario on the ground) the nudge, times the node's weight, is added to the network's button outputs (0..1, pressed above 0.5). The summed nudge per button is capped at +-0.45, so the network keeps a say. `env.decide(out)` does it; the live view, videos, viewer replay and training use it.
+- Fade: weight halves every generation; x0.85 while a top attempt went through the node's area (same height band, 64 px cells) and past it; gone below 0.04 (five generations of halving) and after 20 generations at most. A bypass at another height does not keep a node alive.
+- Nodes are stored in the death map of the best-generation json (`death_map["nodes"]`), so replays use the nodes the genome trained with. Constants are in `deathmap.py`.
+- Planned test: `screen_yi3` with a `death_nodes` variant, ten seeds, ten generations, counting how many seeds climb (base: 2 of 10; takeoff inputs: 2 of 10).
+

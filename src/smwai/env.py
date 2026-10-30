@@ -44,6 +44,7 @@ class EnvConfig:
     window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
     inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options | explore: + pipes
     death_inputs: bool = False     # + four inputs from the death map: where earlier attempts died or got stuck (deathmap.py)
+    death_nodes: bool = False      # the best fatal takeoff of every generation leaves a node: a random nudge on the buttons near that spot (deathmap.py)
     ride_motion: bool = False      # + two inputs: how Mario moves while standing, beyond his own speed (a moving platform carries him; no sprite model needed)
     takeoff_inputs: bool = False   # + four inputs from where the best runs took off for their fatal fall, and how (deathmap.py)
     jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
@@ -328,6 +329,14 @@ class SmwEnv(gym.Env):
         if terminated or truncated:
             info["events"] = list(self.events)      # [frame, kind, x, y] for the path map
         return grid, float(reward), terminated, truncated, info
+
+    def decide(self, out):
+        """Network outputs (0..1) -> pressed buttons (above 0.5); with death_nodes, nodes near Mario's spot nudge the outputs while he is on the ground."""
+        out = np.asarray(out, dtype=np.float64)
+        nodes = (self.death_map or {}).get(deathmap.NODES) if self.cfg.death_nodes else None
+        if nodes and not self.state.in_air:
+            out = out + np.array(deathmap.node_nudge(nodes, self.state.x, self.state.y))
+        return out > 0.5
 
     def _track_takeoff(self, prev, action):
         """Remember the last takeoff: where Mario left the ground, what was pressed, and for how many steps jump (A or B) stayed held."""

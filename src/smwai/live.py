@@ -133,7 +133,7 @@ def episode_frames(run_dir, genome, head, note, death_map, capture=False, max_st
     try:
         while True:
             out = net.activate(obs.ravel().astype(np.float64))
-            pressed = np.array(out) > 0.5
+            pressed = env.decide(out)
             vals = {k: float(net.values.get(k, 0.0)) for k in watch}
             side = panel.draw(obs.ravel(), vals, pressed)
             before = len(env.capture) if capture else 0

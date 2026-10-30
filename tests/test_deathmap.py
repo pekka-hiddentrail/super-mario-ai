@@ -108,3 +108,62 @@ def test_a_bad_takeoff_fades_in_four_generations():
         weights.append(m.takeoffs.get(300 // D.BIN, [0])[0])
     assert weights == [0.5, 0.25, 0.125, 0, 0]             # 0.0625 is below the cut: four generations
     assert not m.takeoffs                                  # gone after four generations without a new death there
+
+
+def test_node_nudge_window_height_and_cap():
+    node = {"x": 300, "y": 200, "w": 1.0, "n": [0.5, -0.5, 0.2, 0, 0, 0, 0, 0]}
+    assert D.node_nudge([node], 300, 200)[:3] == [D.NODE_CAP, -D.NODE_CAP, 0.2]        # summed nudge is limited to +-0.45 per button
+    assert D.node_nudge([node], 268, 200)[2] == 0.2 and D.node_nudge([node], 267, 200) == [0.0] * 8        # 32 px before ...
+    assert D.node_nudge([node], 308, 200)[2] == 0.2 and D.node_nudge([node], 309, 200) == [0.0] * 8        # ... to 8 px after
+    assert D.node_nudge([node], 300, 248)[2] == 0.2 and D.node_nudge([node], 300, 249) == [0.0] * 8        # same height band only (a bypass above)
+    assert D.node_nudge([{**node, "w": 0.5}], 300, 200)[2] == 0.1                      # the nudge shrinks with the node's weight
+    assert D.node_nudge(None, 300, 200) == [0.0] * 8
+
+
+def test_random_nudge_touches_one_to_all_buttons_mostly_four_or_five():
+    import random
+    rng = random.Random(5)
+    counts = []
+    for _ in range(400):
+        n = D.random_nudge(rng)
+        assert len(n) == 8 and all(v == 0.0 or 0.1 <= abs(v) <= 0.5 for v in n)
+        counts.append(sum(v != 0.0 for v in n))
+    assert min(counts) >= 1 and max(counts) <= 8
+    assert sum(c in (4, 5) for c in counts) > 0.4 * len(counts)
+
+
+def test_nodes_fade_by_half_or_slowly_when_they_work_and_leave():
+    import random
+    m = D.NodeMemory()
+    m.update([300, 200, 0, 5, 1, 9.0], lambda x, y: False, random.Random(1))
+    assert m.nodes[0][3] == 1.0 and len(m.nodes[0][2]) == 8
+    weights = []
+    for _ in range(5):
+        m.update(None, lambda x, y: False)
+        weights.append(m.nodes[0][3] if m.nodes else 0)
+    assert weights == [0.5, 0.25, 0.125, 0.0625, 0]                                     # five generations, then gone
+    m.update([300, 200, 0, 5, 1, 9.0], lambda x, y: False, random.Random(1))
+    for _ in range(3):
+        m.update(None, lambda x, y: True)
+    assert abs(m.nodes[0][3] - 0.85 ** 3) < 1e-9                                        # a working node fades slowly
+    for _ in range(D.NODE_MAX_AGE):
+        m.update(None, lambda x, y: True)
+    assert not m.nodes                                                                  # but not forever
+    assert D.features({"nodes": [1], "10": 2.0}, 320)[0] == 16                          # the node list does not disturb the death features
+
+
+def test_env_decide_applies_nodes_on_the_ground_only():
+    import numpy as np
+    from types import SimpleNamespace as S
+    from smwai.env import SmwEnv
+    env = SmwEnv(EnvConfig(death_nodes=True))
+    env.death_map = {"nodes": [{"x": 300, "y": 200, "w": 1.0, "n": [-0.5, 0.5, 0, 0, 0, 0, 0, 0]}]}
+    out = [0.7, 0.3, 0.9, 0.2, 0.1, 0.1, 0.1, 0.1]
+    env.state = S(in_air=False, x=300, y=200)
+    assert env.decide(out).tolist() == [False, True, True, False, False, False, False, False]   # 0.7-0.45 = 0.25 stops it, 0.3+0.45 = 0.75 presses
+    env.state = S(in_air=True, x=300, y=200)
+    assert env.decide(out).tolist() == [True, False, True, False, False, False, False, False]    # in the air: the plain network
+    env.state = S(in_air=False, x=300, y=200)
+    env.cfg.death_nodes = False
+    assert env.decide(out).tolist() == [True, False, True, False, False, False, False, False]    # switch off: nothing changes
+    assert EnvConfig().death_nodes is False

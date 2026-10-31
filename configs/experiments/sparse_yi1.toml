@@ -1,0 +1,23 @@
+# How many links should a genome start with? 8 hidden nodes from the start, three seeds, 10 generations.
+# Earlier result for 5% (hidden-yi1, hidden8, same seeds): 1 of 3 cleared, mean best x 3842.
+# Run: scripts/sparse_yi1.sh   (log /tmp/sparse_yi1.log)
+name = "sparse-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3]
+generations = 10
+pop_size = 100
+workers = 12
+
+[[variant]]
+name = "links-0.5pct"
+[variant.neat]
+num_hidden = 8
+initial_connection = "partial_direct 0.005"
+compatibility_threshold = 4.5
+
+[[variant]]
+name = "links-2.5pct"
+[variant.neat]
+num_hidden = 8
+initial_connection = "partial_direct 0.025"
+compatibility_threshold = 4.5

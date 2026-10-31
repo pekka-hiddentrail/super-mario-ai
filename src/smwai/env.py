@@ -15,6 +15,7 @@ from . import ram as R
 
 GAME = "SuperMarioWorld-Snes-v0"
 BUTTONS = ["A", "B", "X", "Y", "UP", "DOWN", "LEFT", "RIGHT"]
+MESSAGE_MAX_FRAMES = 600   # safety limit for closing a message box (it takes about 20 frames)
 
 
 @dataclass
@@ -44,12 +45,18 @@ class EnvConfig:
     window: list = None            # ... or [left, right, up, down] in tiles (overrides radius), e.g. [4, 8, 4, 8]
     inputs: str = "mixed"          # mixed: one tile grid | channels: solid/enemy/item + scalars | collect: + coins | physics: + jump options | explore: + pipes
     death_inputs: bool = False     # + four inputs from the death map: where earlier attempts died or got stuck (deathmap.py)
+    death_nodes: bool = False      # the best fatal takeoff of every generation leaves a node: a random nudge on the buttons near that spot (deathmap.py)
+    swing_model: bool = False      # the rotating platform (sprite 0x5F) as the model has measured it: where it will be, standing on it is not 'stuck', a wait-and-jump reach grid
+    reach_map: bool = False        # + a grid of the cells some jump would land on (jumpview.reach_grid): where Mario can get to from here
+    ride_motion: bool = False      # + two inputs: how Mario moves while standing, beyond his own speed (a moving platform carries him; no sprite model needed)
+    takeoff_inputs: bool = False   # + four inputs from where the best runs took off for their fatal fall, and how (deathmap.py)
     jump_fixes: bool = False       # jump inputs: walls stop the arc, the message box is no enemy (also not in the enemy grid), and the
                                    # values stay as they were at takeoff while Mario is in the air
     run_options: bool = False      # + 'keep running' and the jump options as from full run speed (jumpview.run_names): 35 inputs
     predict_platforms: bool = False  # jump options use where moving platforms will be during the arc; + 4 inputs about the nearest platform
     cancel_opposites: bool = False  # LEFT+RIGHT cancel each other, and so do UP+DOWN (networks otherwise hold both most of the time)
     room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
+    skip_messages: bool = True    # a message box freezes the game until A or B is pressed: close it by itself, not counted in the frame budget or the stuck rule
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -72,9 +79,9 @@ def view(cfg):
 PLATFORM_INPUTS = ("plat_dx", "plat_dy", "plat_vx", "plat_vy")
 
 
-def platform_inputs(state):
+def platform_inputs(state, swing=False):
     """Nearest moving platform: position relative to Mario in tiles, speed in 1/8 pixel per frame (all 0 when there is none)."""
-    p = R.nearest_platform(state)
+    p = R.nearest_platform(state, swing)
     if p is None:
         return np.zeros(4, dtype=np.int8)
     dx, dy, vx, vy = p
@@ -86,7 +93,11 @@ def input_layout(cfg):
     """Ordered input groups as (name, kind); kind 'grid' = (2r+1)^2 cells, 'scalar' = one value."""
     return (_base_layout(cfg) + ([(name, "scalar") for name in jumpview.run_names()] if cfg.run_options else [])
             + ([(name, "scalar") for name in PLATFORM_INPUTS] if cfg.predict_platforms else [])
-            + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else []))
+            + ([(name, "scalar") for name in deathmap.NAMES] if cfg.death_inputs else [])
+            + ([(name, "scalar") for name in deathmap.TAKEOFF_NAMES] if cfg.takeoff_inputs else [])
+            + ([(name, "scalar") for name in RIDE_INPUTS] if cfg.ride_motion else [])
+            + ([("reach", "grid")] if cfg.reach_map else [])
+            + ([("reach_wait", "grid")] if cfg.reach_map and cfg.swing_model else []))
 
 
 def _base_layout(cfg):
@@ -124,15 +135,40 @@ def build_observation(ram, state, cfg, deaths=None, memory=None):
             extra = memory["run"]
         else:
             extra = jumpview.run_features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2",
-                                          fixed=cfg.jump_fixes, predict=cfg.predict_platforms)
+                                          fixed=cfg.jump_fixes, predict=cfg.predict_platforms, swing=cfg.swing_model)
             if memory is not None:
                 memory["run"] = extra
         obs = np.concatenate([obs, extra])
     if cfg.predict_platforms:
-        obs = np.concatenate([obs, platform_inputs(state)])
+        obs = np.concatenate([obs, platform_inputs(state, cfg.swing_model)])
     if cfg.death_inputs:
         obs = np.concatenate([obs, np.array(deathmap.features(deaths, state.x), dtype=np.int8)])
+    if cfg.takeoff_inputs:
+        obs = np.concatenate([obs, np.array(deathmap.takeoff_features(deaths, state.x), dtype=np.int8)])
+    if cfg.ride_motion:
+        obs = np.concatenate([obs, ride_motion(state, (memory or {}).get("prev"))])
+    if cfg.reach_map:
+        ride = cfg.inputs in ("ride", "ride2")
+        obs = np.concatenate([obs, jumpview.reach_grid(ram, state, view(cfg), ride=ride, ceilings=cfg.inputs == "ride2",
+                                                       fixed=cfg.jump_fixes, predict=cfg.predict_platforms, swing=cfg.swing_model).ravel()])
+        if cfg.swing_model:
+            obs = np.concatenate([obs, jumpview.reach_wait_grid(ram, state, view(cfg), ride=ride, ceilings=cfg.inputs == "ride2",
+                                                                fixed=cfg.jump_fixes, predict=cfg.predict_platforms, swing=True).ravel()])
     return obs
+
+
+RIDE_INPUTS = ("ride_dy", "ride_dx")
+
+
+def ride_motion(state, prev):
+    """Mario's own motion while he stands (on the ground in this step and the one before): the game reports 'on the ground' and a y speed
+    of 0 on a platform too, so the platform shows only as Mario moving although he does not walk or fall. ride_dy = pixels moved up/down
+    over the step (positive = down; a rising platform is negative), ride_dx = pixels moved sideways beyond what his x speed explains.
+    Slopes also move Mario up and down, so this is a hint, not proof of a platform."""
+    if prev is None or state.in_air or prev.in_air:
+        return np.zeros(2, dtype=np.int8)
+    clip = lambda v: int(max(-16, min(16, v)))
+    return np.array([clip(state.y - prev.y), clip(state.x - prev.x - round(state.x_speed / 4))], dtype=np.int8)
 
 
 def _base_observation(ram, state, cfg, memory=None):
@@ -146,7 +182,7 @@ def _base_observation(ram, state, cfg, memory=None):
         if cfg.inputs in ("explore", "ride", "ride2"):
             parts.append(R.pipe_grid(ram, state, view(cfg)).ravel())
         if cfg.inputs in ("ride", "ride2"):
-            parts.append(R.platform_grid(state, view(cfg)).ravel())
+            parts.append(R.platform_grid(state, view(cfg), cfg.swing_model).ravel())
         parts.append(np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8))
         if cfg.inputs in ("physics", "explore", "ride", "ride2"):
             parts.append(np.array(jumpview.motion_scalars(state), dtype=np.int8))
@@ -154,7 +190,7 @@ def _base_observation(ram, state, cfg, memory=None):
                 parts.append(memory["jump"])                    # in the air the jump is under way: keep what the takeoff predicted
             else:
                 jumps = jumpview.features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2",
-                                          fixed=cfg.jump_fixes, predict=cfg.predict_platforms)
+                                          fixed=cfg.jump_fixes, predict=cfg.predict_platforms, swing=cfg.swing_model)
                 if memory is not None:
                     memory["jump"] = jumps
                 parts.append(jumps)
@@ -178,7 +214,9 @@ class SmwEnv(gym.Env):
         self.capture = None            # set to a list to collect every emulator frame (video)
         self.events = []
         self._memory = {}
-        self.death_map = None          # DeathMap.export(): set by the trainer (and by replays) when cfg.death_inputs is on
+        self._takeoff = None
+        self.node_flips = 0
+        self.death_map = None         # DeathMap.export(): set by the trainer (and by replays) when cfg.death_inputs is on
         self.best_ground_y = 0
         self._pipes = set()
         self.room_max, self.room_sig, self._room_pending = {}, None, False
@@ -201,7 +239,20 @@ class SmwEnv(gym.Env):
         st = R.read_state(ram)
         if prev is not None:
             R.annotate_motion(prev.sprites, st.sprites, self.cfg.frame_skip)      # platform speeds from the last step
+        self._memory["prev"] = prev
         return st, build_observation(ram, st, self.cfg, self.death_map, self._memory)
+
+    def _close_message(self):
+        """While a message box is open nothing moves and the network cannot do anything about it: hold A until it closes.
+        These frames are not counted (self.frames, the stuck rule), but a video recording keeps them."""
+        pad = np.zeros(12, dtype=np.int8)
+        pad[self._pad[BUTTONS.index("A")]] = 1
+        for _ in range(MESSAGE_MAX_FRAMES):
+            if R.u8(R.wram(self._env.unwrapped.get_ram()), R.MESSAGE) == 0:
+                return
+            self.frame = self._env.step(pad)[0]
+            if self.capture is not None:
+                self.capture.append(self.frame.copy())
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -211,6 +262,8 @@ class SmwEnv(gym.Env):
         for _ in range(2):  # let the first frames settle so RAM is valid
             self.frame = self._env.step(np.zeros(12, dtype=np.int8))[0]
         self._memory = {}
+        self._takeoff = None
+        self.node_flips = 0
         self.state, grid = self._read()
         self.max_x = self.state.x
         self.frames = 0
@@ -240,7 +293,10 @@ class SmwEnv(gym.Env):
             self.frames += 1
             if self.capture is not None:          # video recording: keep every emulator frame
                 self.capture.append(self.frame.copy())
+        if self.cfg.skip_messages:
+            self._close_message()
         self.state, grid = self._read(prev)
+        self._track_takeoff(prev, action)
         self._track_room(prev)
         rc = self.cfg.reward
         reward = -rc.time_penalty * self.cfg.frame_skip
@@ -284,6 +340,8 @@ class SmwEnv(gym.Env):
                 self.stuck = 0
         if st.pipe_timer > 0 or not st.in_level:
             self.stuck = 0                                    # no control while in a pipe or while a room loads: not 'stuck'
+        if self.cfg.swing_model and R.standing_on_swing(st) is not None:
+            self.stuck = 0                                    # carried by the rotating platform (a lap takes 1012 frames): waiting is not 'stuck'
         died = self.state.dying or self.state.lives < prev.lives
         cleared = self.state.level_cleared
         if died:
@@ -296,9 +354,43 @@ class SmwEnv(gym.Env):
         truncated = self.stuck >= self.cfg.stuck_frames or self.frames >= self.cfg.max_frames
         info = self._info()
         info.update(died=died, cleared=cleared)
+        info["node_flips"] = self.node_flips
+        if died and self._takeoff is not None:
+            t = self._takeoff
+            info["takeoff"] = [t["x"], t["y"], t["mask"], t["hold"], t["run"]]      # the jump (or walk off a ledge) that ended in death
         if terminated or truncated:
             info["events"] = list(self.events)      # [frame, kind, x, y] for the path map
         return grid, float(reward), terminated, truncated, info
+
+    def decide(self, out):
+        """Network outputs (0..1) -> pressed buttons (above 0.5); with death_nodes, nodes near Mario's spot shift the outputs' logits while he is on the ground."""
+        out = np.asarray(out, dtype=np.float64)
+        nodes = (self.death_map or {}).get(deathmap.NODES) if self.cfg.death_nodes else None
+        pressed = out > 0.5
+        if nodes and not self.state.in_air:
+            nudge = np.array(deathmap.node_nudge(nodes, self.state.x, self.state.y))
+            if nudge.any():
+                p = np.clip(out, 1e-6, 1 - 1e-6)
+                nudged = np.log(p / (1 - p)) + deathmap.NODE_LOGIT * nudge > 0
+                self.node_flips += int((nudged != pressed).sum())          # buttons the nodes turned on or off in this episode
+                return nudged
+        return pressed
+
+    def _track_takeoff(self, prev, action):
+        """Remember the last takeoff: where Mario left the ground, what was pressed, and for how many steps jump (A or B) stayed held."""
+        st = self.state
+        jump = bool(action[BUTTONS.index("A")] or action[BUTTONS.index("B")])
+        if not st.in_air:
+            self._takeoff = None                          # landed (or never left): nothing to blame
+        elif not prev.in_air:
+            mask = int(sum(1 << i for i, on in enumerate(action) if on))
+            self._takeoff = {"x": prev.x, "y": prev.y, "mask": mask, "hold": int(jump), "open": jump,
+                             "run": int(bool(action[BUTTONS.index("Y")]))}
+        elif self._takeoff is not None and self._takeoff["open"]:
+            if jump:
+                self._takeoff["hold"] += 1
+            else:
+                self._takeoff["open"] = False
 
     def _track_room(self, prev):
         """With room_progress on, every room (main level, bonus room) keeps its own furthest x."""

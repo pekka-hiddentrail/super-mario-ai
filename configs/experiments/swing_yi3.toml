@@ -1,0 +1,27 @@
+# The reach map plus the rotating platform model (swing_model: where the platform will be, waiting on it is not 'stuck', a wait-and-jump grid) and a window 16 tiles
+# to the right (the far ledge the platform leads to is 13-14 tiles away; the old window saw 9), on Yoshi's Island 3: ten seeds, 20 generations, population 60.
+# Baselines (same settings except for those): plain upview, 3 of 10 seeds climbed, median best x 548; with the reach map, 4 of 10, median 488.
+# About 7 minutes per run, 10 runs. Count climbs: scripts/seed_screen.py swing-yi3. Run: scripts/swing_yi3.sh (log /tmp/swing_yi3.log)
+name = "swing-yi3"
+base = "configs/yi3.toml"
+seeds = [2, 4, 1, 3, 5, 6, 7, 8, 9, 10]
+generations = 20
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "swing"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "ride"
+window = [4, 16, 12, 3]
+cancel_opposites = true
+jump_fixes = true
+reach_map = true
+swing_model = true
+[variant.reward]
+height_bonus = 1.0
+[variant.adapt]
+enabled = true
+stall_generations = 3
+min_improvement = 20.0

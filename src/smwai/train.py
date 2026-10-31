@@ -1,4 +1,5 @@
 """NEAT training: parallel episode evaluation, per-generation best-run recording."""
+import copy
 import json
 import pickle
 import random
@@ -48,7 +49,7 @@ def run_episode(genome, config, record=False):
     total, actions, path = 0.0, [], [[info["x"], info["y"]]]
     cells = {novelty.cell_id(info["x"], info["y"])}
     while True:
-        action = np.array(net.activate(obs.ravel().astype(np.float64))) > 0.5
+        action = env.decide(net.activate(obs.ravel().astype(np.float64)))
         if record:
             actions.append(_to_mask(action))
         obs, reward, term, trunc, info = env.step(action)
@@ -87,7 +88,9 @@ def eval_genome_full(genome, config, death_map=None):
     t0 = time.time()
     total, _, info = run_episode(genome, config)
     return total, info["frames"], {"seconds": round(time.time() - t0, 1), "print": novelty.fingerprint(info["cells"], info.get("events", [])),
-                                   "end": [info["x"], info["y"], bool(info.get("cleared"))]}
+                                   "end": [info["x"], info["y"], bool(info.get("cleared"))], "takeoff": info.get("takeoff"),
+                                   "cells": sorted(info["cells"]) if _get_env().cfg.death_nodes else None,
+                                   "flips": info.get("node_flips", 0)}
 
 
 class PoolEvaluator:
@@ -117,15 +120,19 @@ class PoolEvaluator:
 class RunReporter(neat.reporting.BaseReporter):
     """Writes metrics.csv and records the best run of every generation."""
 
-    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None, novelty_cfg=None, death_inputs=False, live_cfg=None):
+    def __init__(self, run_dir, neat_cfg, stats=None, adapt=None, novelty_cfg=None, death_inputs=False, live_cfg=None, death_nodes=False):
         self.dir = Path(run_dir)
         self.neat_cfg = neat_cfg
         self.adapt = adapt or {}
         self.nov = novelty_cfg or {}
         self.live = live_cfg or {}
-        self.deaths = deathmap.DeathMap() if death_inputs else None
+        self.deaths = deathmap.DeathMap()                  # always kept (takeoffs.jsonl); the networks read it only with death/takeoff inputs
+        self.memory_inputs = death_inputs or death_nodes
+        self.nodes = deathmap.NodeMemory() if death_nodes else None
+        self.node_note = ""
         self.archive = novelty.NoveltyArchive(self.nov.get("k", 5), self.nov.get("archive_max", 300), self.nov.get("add_per_gen", 3))
         self.adapt_best, self.stall, self.boosted, self.adapt_base = -np.inf, 0, False, {}
+        self.nuke, self.nuke_cool, self.evaluated = None, 0, set()        # the planned nuke (two parents), its cooldown, the keys of the evaluated generation
         self.stats = stats if stats is not None else {}     # must stay picklable: NEAT checkpoints reporters
         (self.dir / "best").mkdir(parents=True, exist_ok=True)
         self.generation = -1
@@ -177,6 +184,7 @@ class RunReporter(neat.reporting.BaseReporter):
         fits = [g.fitness for g in population.values()]
         best = max(population.values(), key=lambda g: g.fitness)
         self._adapt_mutation(best.fitness)
+        self._plan_nuke(best, species, population)
         _get_env().death_map = self.stats.get("death_map")          # the memory this generation's genomes had
         reward, actions, info = run_episode(best, config, record=True)
         deterministic = abs(reward - best.fitness) < 1e-6
@@ -184,7 +192,7 @@ class RunReporter(neat.reporting.BaseReporter):
         with open(stem.with_suffix(".pkl"), "wb") as f:
             pickle.dump(best, f)
         stem.with_suffix(".json").write_text(json.dumps({
-            "generation": self.generation, "fitness": best.fitness, "max_x": info["max_x"],
+            "generation": self.generation, "genome": best.key, "fitness": best.fitness, "max_x": info["max_x"],
             "cleared": info["cleared"], "buttons": BUTTONS, "actions": actions,
             "path": info["path"], "events": info.get("events", []),
             "death_map": self.stats.get("death_map")}))
@@ -208,7 +216,7 @@ class RunReporter(neat.reporting.BaseReporter):
         self._remember_deaths(population)              # before novelty selection turns fitness into a blended score
         extra = self._novelty(population, best)
         print(f"gen {self.generation:4d}  best {best.fitness:8.1f}  mean {np.mean(fits):8.1f}  "
-              f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}{extra}", flush=True)
+              f"max_x {info['max_x']:5d}  species {n_species:2d}  {secs:5.1f}s{flag}{extra}{self.node_note}", flush=True)
 
     def _save_population(self, population, species):
         """With [live] save_population: the whole generation (genome, species, fitness), for the live view."""
@@ -223,6 +231,58 @@ class RunReporter(neat.reporting.BaseReporter):
             shutil.copy(tmp, self.dir / f"population_{self.generation:04d}.pkl")
         tmp.replace(self.dir / "population.pkl")
 
+    def _plan_nuke(self, best, species, population):
+        """A long stall (nuke_after generations) plans the nuke: the best genome and a second parent, the best genome of another species
+        (none left: a fresh random genome, a new lineage). It goes off in end_generation, once the next generation is born and speciated."""
+        a = self.adapt
+        self.evaluated = set(population)
+        if self.nuke_cool > 0:
+            self.nuke_cool -= 1
+        if not a.get("enabled") or not a.get("nuke_after") or self.stall < a["nuke_after"] or self.nuke_cool > 0:
+            return
+        best_species = species.get_species_id(best.key)
+        other = None
+        for sid, sp in species.species.items():
+            if sid != best_species and sp.members:
+                top = max(sp.members.values(), key=lambda g: g.fitness)
+                if other is None or top.fitness > other.fitness:
+                    other = top
+        self.nuke = {"a": copy.deepcopy(best), "b": copy.deepcopy(other) if other is not None else None}
+
+    def end_generation(self, config, population, species_set):
+        """Runs after reproduction and speciation: with a nuke planned, most of the new children are rewritten in place (so the species
+        bookkeeping keeps pointing at them) in three equal groups: strongly mutated copies of parent A, strongly mutated copies of parent B,
+        and crossovers of A and B (matching genes picked from either, the rest from the fitter one) mutated once. The elites stay."""
+        if self.nuke is None:
+            return
+        plan, self.nuke = self.nuke, None
+        a = self.adapt
+        gcfg = config.genome_config
+        parent_a, parent_b = plan["a"], plan["b"]
+        fresh = parent_b is None
+        if fresh:                                            # no second species: a new random lineage
+            parent_b = neat.DefaultGenome(-1)
+            parent_b.configure_new(gcfg)
+            parent_b.fitness = 0.0
+        children = [k for k in population if k not in self.evaluated]
+        chosen = random.sample(children, int(len(children) * a.get("nuke_share", 0.7)))
+        for i, key in enumerate(chosen):
+            if i % 3 == 2:
+                new = neat.DefaultGenome(key)
+                new.configure_crossover(parent_a, parent_b, gcfg)
+                new.mutate(gcfg)
+            else:
+                new = copy.deepcopy(parent_a if i % 3 == 0 else parent_b)
+                for _ in range(a.get("nuke_mutations", 3)):
+                    new.mutate(gcfg)
+            population[key].nodes, population[key].connections, population[key].fitness = new.nodes, new.connections, None
+        self.nuke_cool = a.get("nuke_cooldown", 10)
+        with open(self.dir / "events.jsonl", "a") as f:
+            f.write(json.dumps({"generation": self.generation, "nuke": {"replaced": len(chosen), "children": len(children),
+                                                                        "second_parent": "fresh" if fresh else "species"}}) + "\n")
+        print(f"gen {self.generation}: NUKE after {self.stall} stalled generations: {len(chosen)} of {len(children)} children rewritten "
+              f"(mutated best, mutated {'fresh genome' if fresh else 'best of another species'}, and crossovers of the two)", flush=True)
+
     def _log_slow(self, limit=30.0):
         """Some generations take minutes instead of seconds: note any single episode over `limit` seconds (slow.jsonl)."""
         for gid, b in (self.stats.get("behaviour") or {}).items():
@@ -234,11 +294,38 @@ class RunReporter(neat.reporting.BaseReporter):
     def _remember_deaths(self, population):
         """Add where this generation's best runs ended to the death map the next generation's networks can read."""
         behaviour = self.stats.get("behaviour")
-        if self.deaths is None or not behaviour:
+        if not behaviour:
             return
         raw = {gid: g.fitness for gid, g in population.items() if gid in behaviour}
-        self.deaths.update({gid: behaviour[gid]["end"] for gid in raw}, raw)
-        self.stats["death_map"] = self.deaths.export()
+        kept = self.deaths.update({gid: behaviour[gid]["end"] for gid in raw}, raw, {gid: behaviour[gid].get("takeoff") for gid in raw})
+        if kept:                                       # [x, y, buttons mask, jump hold steps, run, fitness] of the fatal takeoffs
+            with open(self.dir / "takeoffs.jsonl", "a") as f:
+                f.write(json.dumps({"generation": self.generation, "takeoffs": kept}) + "\n")
+        if self.nodes is not None:
+            self._update_nodes(raw, behaviour, kept)
+        if self.memory_inputs:
+            self.stats["death_map"] = {**self.deaths.export(), **({deathmap.NODES: self.nodes.export()} if self.nodes is not None else {})}
+
+    def _update_nodes(self, raw, behaviour, kept):
+        """Age the death nodes by what the top attempts did around them, and add this generation's: the best attempt's fatal takeoff."""
+        top = sorted(raw, key=raw.get, reverse=True)[: max(1, int(len(raw) * self.deaths.top_share))]
+        cells = [[(c // 64, c % 64) for c in (behaviour[gid].get("cells") or ())] for gid in top]
+
+        fatal = [behaviour[gid]["takeoff"] for gid in top if behaviour[gid].get("takeoff")]
+
+        def passed(x, y):                         # a top attempt visited the node's area (same height band) and went on beyond it ...
+            if any(deathmap.in_reach(x, y, t[0], t[1]) for t in fatal):
+                return False                      # ... but not while attempts still take off from here and die (the node is still needed)
+            cx, cy = x // 64, y // 64
+            return any(any(a == cx and abs(b - cy) <= 1 for a, b in run) and any(a > cx for a, _ in run) for run in cells)
+
+        self.nodes.update(kept[0] if kept else None, passed)
+        affected = sum(1 for b in behaviour.values() if b.get("flips"))
+        flips = sum(b.get("flips", 0) for b in behaviour.values())
+        self.node_note = f"  nodes {len(self.nodes.nodes)}, {affected}/{len(behaviour)} genomes changed by them ({flips} presses)"
+        with open(self.dir / "nodes.jsonl", "a") as f:
+            f.write(json.dumps({"generation": self.generation, "nodes": len(self.nodes.nodes), "genomes_changed": affected,
+                                "genomes": len(behaviour), "presses_changed": flips}) + "\n")
 
     def _novelty(self, population, best):
         """Score the generation's behaviour novelty and map coverage; with weight > 0 also turn fitness into the selection score."""
@@ -278,6 +365,12 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
     neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
                            neat.DefaultStagnation, str(run_dir / "neat.cfg"))
     pop = neat.Checkpointer.restore_checkpoint(resume) if resume else neat.Population(neat_cfg)
+    if not resume and (cfg.neat.get("start_links") or cfg.neat.get("start_fraction")):
+        from .start import add_start_links, possible_links
+        gcfg = neat_cfg.genome_config
+        total = int(cfg.neat.get("start_links") or 0) or round(cfg.neat["start_fraction"] * possible_links(gcfg, int(cfg.neat.get("num_hidden", 0))))
+        for genome in pop.population.values():
+            add_start_links(genome, gcfg, total, random)
     n_workers = cfg.workers if workers is None else workers
     # the pool must fork before this process creates its own emulator
     stats = {"frames": 0}
@@ -286,7 +379,8 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
         evaluator = HybridEvaluator(n_workers, stats, cfg.env, cfg.hybrid, run_dir / "hybrid.jsonl")
     else:
         evaluator = PoolEvaluator(n_workers, stats)
-    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty, cfg.env.death_inputs, cfg.live))
+    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty,
+                                  cfg.env.death_inputs or cfg.env.takeoff_inputs, cfg.live, cfg.env.death_nodes))
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:

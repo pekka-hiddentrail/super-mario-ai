@@ -60,5 +60,5 @@ scripts/video.sh                                             # mp4 of each run's
 scripts/restart_viewer.sh                                    # replay / path map / videos on :8765
 ```
 An experiment spec names a base config and variants that each override single settings. Every run is
-saved under `runs/exp-<experiment>-<variant>-s<seed>/` and the table lands in `runs/_experiments/<name>/summary.md`.
+saved under `runs/<YYYYMMDD-HHMM>-<experiment>-<variant>-s<seed>/` (the stamp is the launch time) and the table lands in `runs/_experiments/<stamp>-<name>/summary.md`. `--stamp` continues or re-summarises an earlier launch.
 Metrics include emulator frames used (`frames`, `total_frames` in `metrics.csv`), so methods can be compared per frame of experience.

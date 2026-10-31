@@ -1,19 +1,17 @@
-# Do the jump inputs help? Same settings as the `symmetric` variant of window_yi1.toml (collect inputs, adaptive
-# mutation, same seeds 3-7, population 50, 14 generations), plus Mario's speeds and, for jumps A/B held 1/10/25 frames,
-# where each would land (jumpview.py). Compare with the `symmetric` runs of the window experiment.
-# Run: smwai experiment --spec configs/experiments/physics_yi1.toml
+# Jump predictions as inputs (inputs = "physics": for 6 standard jumps: lands / pit / enemy / coins / landing offset) with 8 hidden nodes.
+# Control: hidden8 of compare_yi1 (same seeds 1-3, 15 generations, 25 genomes). Each run gets generation videos and one long video.
+# Run: scripts/physics_yi1.sh   (log /tmp/physics_yi1.log)
 name = "physics-yi1"
-base = "configs/yi1.toml"
-seeds = [3, 4, 5, 6, 7]
-generations = 14
-pop_size = 50
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3]
+generations = 15
+pop_size = 25
 workers = 12
 
 [[variant]]
-name = "physics"
+name = "hidden8-physics"
 [variant.env]
 inputs = "physics"
-[variant.adapt]
-enabled = true
-stall_generations = 3
-min_improvement = 20.0
+[variant.neat]
+num_hidden = 8
+compatibility_threshold = 4.5

@@ -1,0 +1,18 @@
+# One short run on Yoshi's Island 1 with the small start: 8 hidden nodes, 0.24% of all possible links (27), physics inputs.
+# 1 seed (10), 20 generations, 25 genomes; videos of every generation and one long video.
+# Run: scripts/small_yi1.sh   (log /tmp/small_yi1.log)
+name = "small-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [10]
+generations = 20
+pop_size = 25
+workers = 12
+
+[[variant]]
+name = "hidden8-0.24pct"
+[variant.env]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.0024
+compatibility_threshold = 4.5

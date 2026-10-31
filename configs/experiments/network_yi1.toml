@@ -1,0 +1,15 @@
+# One short run (8 hidden nodes from the start, as in hidden_yi1) on Yoshi's Island 1 for watching the network evolve: 10 generations, then a video (game + network) of the best run of EVERY generation.
+# Run: scripts/network_yi1.sh   (log /tmp/network_yi1.log)
+name = "network-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [4]
+generations = 10
+pop_size = 100
+workers = 12
+
+[[variant]]
+name = "yi1"
+[variant.neat]
+num_hidden = 8
+initial_connection = "partial_direct 0.005"   # 0.5% of all possible links at the start (the default 5% is ~270 links)
+compatibility_threshold = 4.5   # 16 starting nodes put random genomes ~3.3 apart; at 3.0 every genome is its own species

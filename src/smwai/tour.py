@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .live import episode_frames
+from .live import episode_frames, generation_death_map
 
 
 def pick_tour(run_dir, generations=5, species=5, seed=1):
@@ -47,7 +47,7 @@ def make_tour(run_dir, generations=5, species=5, seed=1, max_steps=450, out=None
             note = f"genome {m['gid']}  fit {m['fitness']:.0f}"
             print(head, note, flush=True)
             last = None
-            for frames in episode_frames(run_dir, m["genome"], head, note, None, capture=True, max_steps=max_steps):
+            for frames in episode_frames(run_dir, m["genome"], head, note, generation_death_map(run_dir, gen), capture=True, max_steps=max_steps):
                 for canvas in frames:
                     writer.append_data(np.asarray(canvas))
                     last = canvas

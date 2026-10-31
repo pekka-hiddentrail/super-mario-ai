@@ -119,6 +119,23 @@ def param_inputs(raw, prefix):
             raw["env"]["cancel_opposites"] = st.checkbox(
                 "Left+right and up+down cancel each other", value=bool(raw["env"].get("cancel_opposites", False)),
                 key=prefix + "cancel", help="Pressing both buttons of a pair presses neither.")
+            raw["env"]["death_nodes"] = st.checkbox(
+                "Death nodes: random nudges on the buttons where the best attempt died", value=bool(raw["env"].get("death_nodes", False)),
+                key=prefix + "deathnodes", help="Each generation the best fatal takeoff leaves a node: a random nudge (+-0.5) on 1 to all buttons near that spot "
+                                                "and height, on the ground. It halves every generation, or fades slowly (x0.85) while a top attempt passes through it, and leaves "
+                                                "after five generations (twenty at most). The summed nudge is capped at +-0.45 so the network keeps a say.")
+            raw["env"]["reach_map"] = st.checkbox(
+                "Reach map: where each jump would land", value=bool(raw["env"].get("reach_map", False)),
+                key=prefix + "reachmap", help="A grid like the solid grid: the tiles some jump (A or B, several hold times, from the speed Mario has, run speed right and left) would land on. "
+                                              "Computed with the jump physics; the network still decides.")
+            raw["env"]["ride_motion"] = st.checkbox(
+                "Riding inputs: how Mario moves while standing", value=bool(raw["env"].get("ride_motion", False)),
+                key=prefix + "ridemotion", help="Two inputs: up/down and sideways movement beyond Mario's own speed while he stands, which is how a moving platform "
+                                                "shows without any sprite model (slopes also move him, so it is a hint).")
+            raw["env"]["takeoff_inputs"] = st.checkbox(
+                "Memory inputs: bad takeoffs of earlier generations", value=bool(raw["env"].get("takeoff_inputs", False)),
+                key=prefix + "takeoff", help="Four inputs: how far the nearest takeoff is where the best runs of recent generations took off for their fatal fall, "
+                                             "and how long jump was held / whether Y was held there. Every run records these takeoffs (takeoffs.jsonl) either way.")
             raw["env"]["room_progress"] = st.checkbox(
                 "Progress per room (pipes and bonus rooms)", value=bool(raw["env"].get("room_progress", False)),
                 key=prefix + "rooms", help="Each room keeps its own furthest x, so a bonus room is not a dead end.")

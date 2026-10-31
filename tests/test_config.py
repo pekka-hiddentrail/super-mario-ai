@@ -19,6 +19,15 @@ def test_neat_text_is_valid_ini():
     parser.read_string(cfg.neat_text())
     assert parser["DefaultGenome"]["num_inputs"] == "169"
     assert parser["DefaultGenome"]["num_outputs"] == "8"
+    assert parser["DefaultGenome"]["num_hidden"] == "0"
+
+
+def test_num_hidden_setting():
+    cfg = config.load(CFG)
+    cfg.neat["num_hidden"] = 8
+    parser = configparser.ConfigParser()
+    parser.read_string(cfg.neat_text())
+    assert parser["DefaultGenome"]["num_hidden"] == "8"
 
 
 def test_dump_roundtrip(tmp_path):
@@ -49,3 +58,17 @@ def test_ppo_defaults_and_config():
     assert cfg.ppo["n_envs"] == 8 and cfg.env.inputs == "collect"
     assert cfg.ppo["batch_size"] <= cfg.ppo["n_envs"] * cfg.ppo["n_steps"]
     assert config.load("configs/level1.toml").ppo["total_steps"] == config.PPO_DEFAULTS["total_steps"]
+
+
+def test_bias_and_weight_ranges_are_settings():
+    cfg = config.load(CFG)
+    parser = configparser.ConfigParser()
+    parser.read_string(cfg.neat_text())
+    g = parser["DefaultGenome"]
+    assert (g["bias_init_stdev"], g["bias_max_value"], g["bias_min_value"]) == ("1.0", "30.0", "-30.0")
+    assert (g["weight_init_stdev"], g["weight_max_value"], g["weight_min_value"]) == ("1.0", "30.0", "-30.0")
+    cfg.neat.update(bias_init_stdev=0.3, bias_limit=1.0)
+    parser = configparser.ConfigParser()
+    parser.read_string(cfg.neat_text())
+    g = parser["DefaultGenome"]
+    assert (g["bias_init_stdev"], g["bias_max_value"], g["bias_min_value"]) == ("0.3", "1.0", "-1.0")

@@ -26,9 +26,18 @@ def main():
     ap.add_argument("--skip", type=int, default=1, help="draw only every Nth frame")
     args = ap.parse_args()
 
-    env = retro.make(GAME, state=args.state, use_restricted_actions=retro.Actions.ALL,
+    raw = Path(args.state) if Path(args.state).is_file() else None          # a state saved with F5 (or make_state_near.py)
+    env = retro.make(GAME, state="YoshiIsland2" if raw else args.state, use_restricted_actions=retro.Actions.ALL,
                      render_mode=None)
-    obs, _ = env.reset()
+    def restart():
+        """Back to the start state: the level's, or the state file the session was started from."""
+        obs, _ = env.reset()
+        if raw:
+            env.unwrapped.em.set_state(raw.read_bytes())
+            obs = env.step(np.zeros(len(env.buttons), dtype=np.int8))[0]
+        return obs
+
+    obs = restart()
     buttons = list(env.buttons)
     pygame.init()
     h, w = obs.shape[:2]
@@ -44,11 +53,13 @@ def main():
             if ev.type == pygame.QUIT or (ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE):
                 return
             if ev.type == pygame.KEYDOWN and ev.key == pygame.K_r:
-                obs, _ = env.reset()
+                obs = restart()
             if ev.type == pygame.KEYDOWN and ev.key == pygame.K_F5:
                 path = Path("states") / f"manual_{int(time.time())}.state"
                 path.write_bytes(env.unwrapped.em.get_state())
-                print("saved", path)
+                print("saved", path.resolve(), flush=True)
+                pygame.display.set_caption(f"SAVED {path.name}")
+                last_fps = time.time() + 3        # keep the caption for a few seconds
         pressed = pygame.key.get_pressed()
         action = np.zeros(len(buttons), dtype=np.int8)
         for key, name in KEYS.items():
@@ -56,7 +67,7 @@ def main():
                 action[buttons.index(name)] = 1
         obs, _, term, trunc, _ = env.step(action)
         if term or trunc:
-            obs, _ = env.reset()
+            obs = restart()
         n += 1
         if n % args.skip == 0:
             pygame.surfarray.blit_array(frame, np.transpose(obs, (1, 0, 2)))

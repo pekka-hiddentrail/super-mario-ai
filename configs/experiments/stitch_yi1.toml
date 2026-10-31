@@ -1,0 +1,15 @@
+# A small test of the long video: one seed, 20 genomes, 5 generations, 8 hidden nodes with the default 5% start.
+# Videos of every generation, then one long video (all_generations.mp4) with the last frame held for a second between them.
+# Run: scripts/stitch_yi1.sh   (log /tmp/stitch_yi1.log)
+name = "stitch-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [1]
+generations = 5
+pop_size = 20
+workers = 12
+
+[[variant]]
+name = "hidden8"
+[variant.neat]
+num_hidden = 8
+compatibility_threshold = 4.5

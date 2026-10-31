@@ -5,6 +5,11 @@ $7FC800 (WRAM offset 0x1C800), the same one MarI/O used: value 1 means a solid b
 """
 from dataclasses import dataclass, field
 
+import bisect
+import json
+import math
+from pathlib import Path
+
 import numpy as np
 
 PLAYER_X = 0x94            # 16-bit, level pixels
@@ -29,6 +34,7 @@ YOSHI_COINS = 0x1420       # big (Yoshi/dragon) coins collected in this level
 BONUS_STARS = 0x1900       # bonus stars won at the goal bar (read on the clear step, before the tally counts it down)
 USED_BLOCK = 0x32          # Map16 0x132: a ? block that has been hit (count rises when one is hit)
 IN_WATER = 0x75            # player is in water
+MESSAGE = 0x1426           # message box trigger: 0 none, 1/2 = message 1/2, 3 = Yoshi thanks. The game waits for A or B until the box is closed.
 ON_YOSHI = 0x187A          # riding Yoshi
 END_LEVEL_TIMER = 0x1493   # non-zero once the goal is hit
 SPRITE_STATUS = 0x14C8     # 12 slots, 0 = empty
@@ -46,7 +52,7 @@ PLATFORM_SPRITES = {BRIDGE_SPRITE, SWING_SPRITE}
 HARMLESS_SPRITES = {0xB9}  # message box (the speech-bubble block): solid and harmless, not an enemy
 COIN_TILE = 0x2B           # Map16 low byte of a coin block (high byte 0)
 MAP16_LOW = 0xC800
-PIPE_TILES = range(0x34, 0x40)   # Map16 0x134-0x13F: the green pipe pieces (seen: 0x135-0x138 down pipe, 0x13B-0x13F sideways pipe)
+PIPE_TILES = range(0x33, 0x40)   # Map16 0x133-0x13F: pipe pieces of every colour (colour is the palette, the tiles are the same; seen: 0x133/0x134 and 0x137/0x138 tops, 0x135/0x136 body, 0x13B-0x13F sideways pipe)
 N_SPRITES = 12
 WRAM_OFFSET = 0x2800   # stable-retro get_ram(): 8K low mirror + 2K SRAM, then 128K WRAM
 
@@ -102,8 +108,14 @@ class MarioState:
     rooms: int = 0
     yoshi_coins: int = 0
     bonus_stars: int = 0        # set when the goal bar is hit: 0 for a low hit, more the higher the bar was hit
+    message: int = 0            # a message box is open (the text pops up and Mario cannot move)
     used_blocks: int = 0        # number of already-hit blocks in the level (rises on every block hit)
     sprites: list = field(default_factory=list)
+
+
+def read_swing_angle(ram, slot):
+    """The rotating platform's angle: $1528 (high) and $151C (low), in 1/512 turn; 384 = the chain upright, idle."""
+    return u8(ram, 0x1528 + slot) << 8 | u8(ram, 0x151C + slot)
 
 
 def read_sprites(ram):
@@ -117,7 +129,7 @@ def read_sprites(ram):
             y=u8(ram, SPRITE_Y_LO + slot) | u8(ram, SPRITE_Y_HI + slot) << 8,
             number=number, is_item=number in POWERUP_SPRITES,
             kind="item" if number in POWERUP_SPRITES else "neutral" if number in NEUTRAL_SPRITES else "enemy",
-            slot=slot, ext=u8(ram, 0x151C + slot) if number == BRIDGE_SPRITE else 0,
+            slot=slot, ext=u8(ram, 0x151C + slot) if number == BRIDGE_SPRITE else read_swing_angle(ram, slot) if number == SWING_SPRITE else 0,
             timer=u8(ram, 0x1540 + slot) if number == BRIDGE_SPRITE else 0))
     for slot in range(N_SPRITES):
         if u8(ram, EXT_NUMBER + slot) == 0:
@@ -151,7 +163,7 @@ def read_state(ram):
         x_speed=u8(ram, PLAYER_X_SPEED) - 256 if u8(ram, PLAYER_X_SPEED) > 127 else u8(ram, PLAYER_X_SPEED),
         y_speed=u8(ram, PLAYER_Y_SPEED) - 256 if u8(ram, PLAYER_Y_SPEED) > 127 else u8(ram, PLAYER_Y_SPEED),
         in_air=u8(ram, IN_AIR) != 0,
-        pipe_timer=u8(ram, PIPE_TIMER), pipe_action=u8(ram, PIPE_ACTION), rooms=u8(ram, ROOMS),
+        pipe_timer=u8(ram, PIPE_TIMER), pipe_action=u8(ram, PIPE_ACTION), rooms=u8(ram, ROOMS), message=u8(ram, MESSAGE),
         sprites=read_sprites(ram))
 
 
@@ -207,7 +219,7 @@ def coin_grid(ram, state, view=6):
 
 
 def pipe_grid(ram, state, view=6):
-    """Window grid centred on Mario: 1 on the pieces of a green pipe (so the network can tell pipes from ordinary ground)."""
+    """Window grid centred on Mario: 1 on the pieces of a pipe of any colour (so the network can tell pipes from ordinary ground)."""
     grid = np.zeros(grid_shape(view), dtype=np.int8)
     for row, col, wx, wy in _cells(state, view):
         tx, ty = (wx + 8) // 16, wy // 16
@@ -312,12 +324,58 @@ def bridge_ext(sp, t):
     return ext
 
 
-def platform_blocks(state, t=0):
+# The rotating platform (sprite 0x5F), measured with scripts/place_on_swing.py: a platform on a ball chain that turns around a pivot. Idle (angle 384,
+# chain upright) until Mario stands on it; then it turns two full turns clockwise (the angle value rises from 384 to 1407, 512 per turn; slowest at the top,
+# fastest at the bottom of each turn: a pendulum going round), stops upright after 508 frames, and turns two turns back, and so on. swing_table.json holds
+# the angle value of every frame of one half cycle. Mario stands on a circle of radius ~80 px; the sprite's position is 114 px right of and 16 px below the pivot.
+SWING_V0, SWING_UNITS = 384, 512.0
+SWING_RADIUS, SWING_PIVOT, SWING_WIDTH = 80.0, (-114, -16), 64
+SWING_TABLE = json.loads(Path(__file__).with_name("swing_table.json").read_text())["values"]
+
+
+def _swing_unfolded(sp):
+    """(position along the unfolded cycle 0 .. 2 * (n - 1), idle): the half cycle forward, then the same table backward."""
+    n = len(SWING_TABLE)
+    idle = sp.ext <= SWING_TABLE[0] + 1 and sp.dext == 0
+    i = min(n - 1, bisect.bisect_left(SWING_TABLE, sp.ext))
+    return (2 * (n - 1) - i if sp.dext < 0 else i), idle
+
+
+def swing_angle(sp, t=0, riding=False):
+    """The platform's angle value `t` frames from now. An idle platform stays where it is unless `riding` (Mario stands on it): then it starts to turn."""
+    u, idle = _swing_unfolded(sp)
+    if idle and not riding:
+        return SWING_TABLE[0]
+    n = len(SWING_TABLE)
+    u = (0 if idle else u) + int(t)
+    u %= 2 * (n - 1)
+    return SWING_TABLE[u if u <= n - 1 else 2 * (n - 1) - u]
+
+
+def swing_position(sp, t=0, riding=False):
+    """(x of the platform's middle, y of its surface) of the rotating platform `t` frames from now."""
+    theta = 2 * math.pi * (swing_angle(sp, t, riding) - SWING_V0) / SWING_UNITS         # clockwise from upright
+    px, py = sp.x + SWING_PIVOT[0], sp.y + SWING_PIVOT[1]
+    return px + SWING_RADIUS * math.sin(theta), py - SWING_RADIUS * math.cos(theta)
+
+
+def standing_on_swing(state):
+    """The rotating platform sprite Mario stands on (feet within its predicted surface), or None."""
+    if state.in_air:
+        return None
+    for sp in state.sprites:
+        if sp.number == SWING_SPRITE:
+            cx, sy = swing_position(sp)
+            if abs(state.x + 8 - cx) <= SWING_WIDTH // 2 + 4 and abs(state.y + 32 - sy) <= 6:
+                return sp
+    return None
+
+
+def platform_blocks(state, t=0, swing=False, riding=False):
     """Solid 16x16 blocks (world x, y of the top-left corner) that belong to moving platforms, `t` frames from now when t > 0
     (bridge: bridge_ext; swing: constant velocity, which is zero until Mario stands on it). t = 0 is the present.
-    Bridge: the middle block plus one pair at +-ext/2 and one pair at +-ext. Swing: one block at the sprite position."""
-    """Solid 16x16 blocks (world x, y of the top-left corner) that belong to moving platforms right now.
-    Bridge: the middle block plus one pair at +-ext/2 and one pair at +-ext. Swing: one block at the sprite position."""
+    Bridge: the middle block plus one pair at +-ext/2 and one pair at +-ext. Swing: one block at the sprite position, or with
+    swing=True the rotating platform as four blocks along its predicted surface (see swing_position)."""
     blocks = []
     for sp in state.sprites:
         if sp.number == BRIDGE_SPRITE:
@@ -325,30 +383,40 @@ def platform_blocks(state, t=0):
             for off in {0, ext // 2, -(ext // 2), ext, -ext}:
                 blocks.append((sp.x + off, sp.y))
         elif sp.number == SWING_SPRITE:
-            blocks.append((sp.x + sp.vx * t, sp.y + sp.vy * t))
+            if swing:
+                cx, sy = swing_position(sp, t, riding)
+                blocks += [(cx - SWING_WIDTH // 2 + 16 * k, sy) for k in range(SWING_WIDTH // 16)]
+            else:
+                blocks.append((sp.x + sp.vx * t, sp.y + sp.vy * t))
     return blocks
 
 
-def nearest_platform(state):
-    """(dx, dy, vx, vy) of the platform sprite nearest to Mario, in pixels and pixels per frame; None when there is none."""
+def nearest_platform(state, swing=False):
+    """(dx, dy, vx, vy) of the platform sprite nearest to Mario, in pixels and pixels per frame; None when there is none.
+    swing=True: the rotating platform is where its model puts it, and its speed comes from the model."""
     best = None
     for sp in state.sprites:
         if sp.number in PLATFORM_SPRITES:
-            d = abs(sp.x - state.x) + abs(sp.y - state.y)
+            x, y = (swing_position(sp)[0] - 8, swing_position(sp)[1] - 32) if swing and sp.number == SWING_SPRITE else (sp.x, sp.y)
+            d = abs(x - state.x) + abs(y - state.y)
             if best is None or d < best[0]:
-                best = (d, sp)
+                best = (d, sp, x, y)
     if best is None:
         return None
-    sp = best[1]
-    return sp.x - state.x, sp.y - state.y, sp.vx, sp.vy
+    _, sp, x, y = best
+    if swing and sp.number == SWING_SPRITE:
+        riding = standing_on_swing(state) is not None
+        (x1, y1), (x0, y0) = swing_position(sp, 1, riding), swing_position(sp, 0, riding)
+        return x - state.x, y - state.y, x1 - x0, y1 - y0
+    return x - state.x, y - state.y, sp.vx, sp.vy
 
 
-def platform_grid(state, view=6):
+def platform_grid(state, view=6, swing=False):
     """Window grid centred on Mario: 1 where a moving-platform block is."""
     left, right, up, down = window(view)
     rows, cols = grid_shape(view)
     grid = np.zeros((rows, cols), dtype=np.int8)
-    for bx, by in platform_blocks(state):
+    for bx, by in platform_blocks(state, 0, swing):
         col = round((bx - state.x) / 16) + left
         row = round((by - state.y) / 16) + up
         if 0 <= row < rows and 0 <= col < cols:

@@ -23,7 +23,7 @@ def _run_pattern(env, jump_every, down_every, steps=700):
 
 
 def test_pipe_pays_once_and_exit_does_not_pay():
-    env = SmwEnv(EnvConfig(levels=["YoshiIsland2"], stuck_frames=900, reward=RewardConfig(pipe_bonus=100000.0)))
+    env = SmwEnv(EnvConfig(skip_messages=False, levels=["YoshiIsland2"], stuck_frames=900, reward=RewardConfig(pipe_bonus=100000.0)))
     rewards = _run_pattern(env, 14, 5)
     pipes = [e for e in env.events if e[1] == "pipe"]
     assert len(pipes) == 1 and 3800 < pipes[0][2] < 3950          # the pipe near x 3878 on Yoshi Island 2
@@ -31,7 +31,7 @@ def test_pipe_pays_once_and_exit_does_not_pay():
 
 
 def test_no_pipe_reward_when_bonus_is_zero():
-    env = SmwEnv(EnvConfig(levels=["YoshiIsland2"], stuck_frames=900))
+    env = SmwEnv(EnvConfig(skip_messages=False, levels=["YoshiIsland2"], stuck_frames=900))
     rewards = _run_pattern(env, 14, 5)
     assert max(rewards) < 1000                                      # the event is recorded but pays nothing
     assert any(e[1] == "pipe" for e in env.events)
@@ -59,7 +59,7 @@ def test_sideways_pipe_on_yoshi_island_4_pays_once():
 
 
 def test_room_progress_pays_progress_inside_the_bonus_room():
-    env = SmwEnv(EnvConfig(levels=["YoshiIsland2"], stuck_frames=600, room_progress=True,
+    env = SmwEnv(EnvConfig(skip_messages=False, levels=["YoshiIsland2"], stuck_frames=600, room_progress=True,
                            reward=RewardConfig(pipe_bonus=100000.0)))
     env.reset()
     after_pipe, entered = 0.0, False
@@ -82,7 +82,7 @@ def test_room_progress_pays_progress_inside_the_bonus_room():
 
 def test_pipe_trip_does_not_count_as_being_stuck():
     """With the default 120-frame patience the run used to be cut off right after a pipe (animation + room load)."""
-    env = SmwEnv(EnvConfig(levels=["YoshiIsland2"], room_progress=True, reward=RewardConfig(pipe_bonus=100000.0)))
+    env = SmwEnv(EnvConfig(skip_messages=False, levels=["YoshiIsland2"], room_progress=True, reward=RewardConfig(pipe_bonus=100000.0)))
     env.reset()
     pipe_step, last_step = None, 0
     for t in range(900):

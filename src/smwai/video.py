@@ -2,6 +2,7 @@
 runs, the network next to it (input grids, hidden nodes, connections, buttons), as in MarI/O."""
 import json
 import pickle
+import random
 from pathlib import Path
 
 import neat
@@ -19,7 +20,7 @@ PANEL_W = 560
 BG = (20, 22, 26)
 MUTED, TEXT, ACCENT = (139, 147, 161), (230, 232, 236), (90, 169, 255)
 POS, NEG = (63, 185, 80), (248, 81, 73)
-GRID_COLORS = {"solid": (154, 163, 178), "enemy": (248, 81, 73), "item": (188, 140, 255), "coin": (242, 204, 96), "pipe": (63, 185, 80), "platform": (232, 131, 58)}
+GRID_COLORS = {"solid": (154, 163, 178), "enemy": (248, 81, 73), "item": (188, 140, 255), "coin": (242, 204, 96), "pipe": (63, 185, 80), "platform": (232, 131, 58), "reach": (88, 166, 255), "reach_wait": (63, 220, 200)}
 
 
 def best_generation(run_dir):
@@ -102,16 +103,11 @@ class NetworkPanel:
                 self.groups.append(("label", prefix, 0, 10, y + r * 12))
                 for k, (i, field) in enumerate(items):
                     self._text_item(i, field, label_w + k * 76, y + r * 12)
-        cols = {}
-        for h in graph["hidden"]:
-            cols.setdefault(graph["layer"][str(h)], []).append(h)
-        top = max(list(cols) + [1]) + 1
-        for layer, nodes in cols.items():
-            for i, h in enumerate(nodes):
-                self.pos[h] = ((200 + (layer - 1) * (210 / max(1, top - 1))) / PANEL_W * self.lw,
-                               50 + (i + 0.5) * (self.lh - 100) / len(nodes))
+        for h in graph["hidden"]:            # hidden nodes sit at a random place between the input grids and the buttons (the same one in every video: seeded by the node id)
+            rnd = random.Random(f"hidden-{h}")
+            self.pos[h] = ((190 + rnd.random() * 260) / PANEL_W * self.lw, 50 + rnd.random() * (self.lh - 100))
         for i, o in enumerate(graph["outputs"]):
-            self.pos[o] = (480 / PANEL_W * self.lw, 56 + (i + 0.5) * (self.lh - 110) / len(graph["outputs"]))
+            self.pos[o] = (436 / PANEL_W * self.lw, 56 + (i + 0.5) * (self.lh - 110) / len(graph["outputs"]))
 
     def _text_item(self, input_index, label, x, y):
         key = self.graph["inputs"][input_index]
@@ -125,20 +121,25 @@ class NetworkPanel:
         small, mid = ImageFont.load_default(size=11), ImageFont.load_default(size=13)
         value = dict(zip(g["inputs"], (int(v) for v in obs)))
         value.update(vals)
-        d.text((10, 8), "Network: inputs around Mario, hidden nodes, buttons", fill=MUTED, font=mid)
-        strong = []
+        strong, total = [], dict(g.get("bias", {}))        # total: bias + weight x input of every link into a node = its sum
         for e in g["edges"]:                       # quiet connections first, active ones on top
             a, b = self.pos.get(e["from"]), self.pos.get(e["to"])
+            c = e["w"] * value.get(e["from"], 0)
+            if str(e["to"]) in total:
+                total[str(e["to"])] += c
             if a is None or b is None:
                 continue
-            v = value.get(e["from"], 0)
-            active = v != 0 if e["from"] < 0 else v > 0.5
-            if active:
-                strong.append((a, b, e["w"]))
+            if abs(c) > 0.01:                      # carries signal now: width follows weight x input
+                strong.append((a, b, e["w"], abs(c)))
             else:
                 d.line([a, b], fill=_mix(POS if e["w"] > 0 else NEG, 0.16), width=1)
-        for a, b, w in strong:
-            d.line([a, b], fill=_mix(POS if w > 0 else NEG, 0.95), width=2 if abs(w) > 1.5 else 1)
+        for a, b, w, c in strong:
+            d.line([a, b], fill=_mix(POS if w > 0 else NEG, 0.95), width=1 + int(round(min(4.0, c) * 1.2)))
+        st = g.get("stats", {})
+        line = "Network"
+        if st:
+            line += f"   hidden {len(g['hidden'])}/{st['hidden_total']} connected   links {len(g['edges'])}/{st['conns_enabled']}"
+        d.text((10, 8), line + f"   active {len(strong)}", fill=MUTED, font=mid)
         for kind, name, start, x, y in self.groups:
             if kind == "grid":
                 d.text((x, y - 13), name, fill=MUTED, font=small)
@@ -174,6 +175,9 @@ class NetworkPanel:
             d.ellipse([x - 7, y - 7, x + 7, y + 7], fill=ACCENT if on else _mix(TEXT, 0.15 + 0.6 * v),
                       outline=ACCENT if on else MUTED, width=3 if on else 2)
             d.text((x + 13, y - 7), BUTTONS[i], fill=ACCENT if on else MUTED, font=mid)
+            bias = g.get("bias", {}).get(str(o))
+            if bias is not None:                   # what decides the button: its own bias and what the inputs add (sum, before the sigmoid)
+                d.text((x + 62, y - 6), f"{bias:+.1f} {total[str(o)] - bias:+.1f}", fill=ACCENT if on else (90, 97, 110), font=small)
         return img if self.zoom == 1.0 else img.resize((PANEL_W, self.height), Image.LANCZOS)
 
 
@@ -183,15 +187,20 @@ def _play_network(run_dir, generation, env):
                            neat.DefaultStagnation, str(run_dir / "neat.cfg"))
     with open(run_dir / "best" / f"gen_{generation:04d}.pkl", "rb") as f:
         genome = pickle.load(f)
+    genome_id = genome.key
     net = neat.nn.FeedForwardNetwork.create(genome, neat_cfg)
     graph = genome_graph(genome, neat_cfg)
+    outputs = set(graph["outputs"])
+    graph["hidden"] = sorted(k for k in genome.nodes if k not in outputs)       # also hidden nodes nothing reaches yet: the videos show every node of the genome
+    graph["layer"].update({str(k): 1 for k in graph["hidden"] if str(k) not in graph["layer"]})
+    graph["bias"].update({str(k): round(genome.nodes[k].bias, 3) for k in graph["hidden"]})
     watch = graph["hidden"] + graph["outputs"]
     env.death_map = json.loads((run_dir / "best" / f"gen_{generation:04d}.json").read_text()).get("death_map")
     obs, info = env.reset()
     steps, total = [], 0.0
     while True:
         out = net.activate(obs.ravel().astype(np.float64))
-        action = np.array(out) > 0.5
+        action = env.decide(out)
         before = len(env.capture)
         steps.append({"obs": obs.ravel().copy(), "vals": {k: float(net.values.get(k, 0.0)) for k in watch},
                       "pressed": action, "x": info["x"], "before": before})
@@ -199,6 +208,7 @@ def _play_network(run_dir, generation, env):
         total += reward
         steps[-1].update(n=len(env.capture) - before, reward=total)
         if term or trunc:
+            info["genome"] = genome_id
             return steps, graph, info
 
 
@@ -216,6 +226,13 @@ def _play_masks(rec, env):
         if term or trunc:
             break
     return steps, None, info
+
+
+def _video_writer(path, fps=60):
+    """The one place that sets how videos are encoded (stitching relies on every piece having the same settings)."""
+    import imageio.v2 as imageio
+    return imageio.get_writer(str(path), fps=fps, codec="libx264", quality=7, macro_block_size=None,
+                              ffmpeg_params=["-movflags", "+faststart"])
 
 
 def render_run(run_dir, out_path=None, generation=None):
@@ -241,11 +258,10 @@ def render_run(run_dir, out_path=None, generation=None):
     out_path = Path(out_path or run_dir / "videos" / f"best_gen_{generation:04d}.mp4")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     result = "cleared" if info.get("cleared") else "died" if info.get("died") else "timed out"
-    head = f"{run_dir.name}   generation {generation}"
+    head = f"{run_dir.name}   generation {generation}" + (f"   genome {info['genome']}" if "genome" in info else "")
     height = 224 * SCALE + BANNER
     panel = NetworkPanel(graph, layout, env_view(cfg.env), height) if graph else None
-    writer = imageio.get_writer(str(out_path), fps=60, codec="libx264", quality=7, macro_block_size=None,
-                                ffmpeg_params=["-movflags", "+faststart"])
+    writer = _video_writer(out_path)
     try:
         for step in steps:
             pressed = {b for b, on in zip(BUTTONS, step["pressed"]) if on}
@@ -263,4 +279,46 @@ def render_run(run_dir, out_path=None, generation=None):
                 writer.append_data(np.asarray(canvas))
     finally:
         writer.close()
+    return out_path
+
+
+def stitch_run(run_dir, out_path=None, gap_seconds=1.0, fps=60):
+    """One long video of a run: every generation's best-run video in order, each followed by its last frame held for `gap_seconds`.
+    The pieces are joined without re-encoding (ffmpeg stream copy), so it takes seconds and keeps the quality of the generation
+    videos; only the short holds are encoded, with the same settings. The generation videos must exist already (`smwai video`)."""
+    import subprocess
+    import tempfile
+    from concurrent.futures import ThreadPoolExecutor
+
+    import imageio.v2 as imageio
+    import imageio_ffmpeg
+    run_dir = Path(run_dir)
+    parts = sorted((run_dir / "videos").glob("best_gen_*.mp4"))
+    if not parts:
+        raise FileNotFoundError(f"no generation videos in {run_dir / 'videos'}")
+    out_path = Path(out_path or run_dir / "videos" / "all_generations.mp4")
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        def hold_clip(i):
+            last = tmp / f"last_{i}.png"        # the last frame: only the final second is decoded
+            subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-sseof", "-1", "-i", str(parts[i]), "-update", "1", str(last)], check=True)
+            hold = tmp / f"hold_{i}.mp4"
+            writer = _video_writer(hold, fps)
+            frame = imageio.imread(str(last))
+            for _ in range(int(gap_seconds * fps)):
+                writer.append_data(frame)
+            writer.close()
+            return hold
+
+        with ThreadPoolExecutor(max_workers=4) as pool:          # the pieces do not depend on each other
+            holds = list(pool.map(hold_clip, range(len(parts))))
+        lines = []
+        for part, hold in zip(parts, holds):
+            lines.append(f"file '{part.resolve().as_posix()}'")
+            lines.append(f"file '{hold.as_posix()}'")
+        listing = tmp / "list.txt"
+        listing.write_text("\n".join(lines) + "\n")
+        subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
+                        "-c", "copy", "-movflags", "+faststart", str(out_path)], check=True)
     return out_path

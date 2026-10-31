@@ -31,7 +31,10 @@ def genome_graph(genome, neat_cfg):
     edges = [{"from": a, "to": b, "w": round(w, 3)} for (a, b), w in conns
              if (b in required) and (a in inputs or a in required)]
     return {"inputs": inputs, "outputs": outputs, "hidden": hidden,
-            "layer": {str(k): layer.get(k, 1) for k in hidden + outputs}, "edges": edges}
+            "layer": {str(k): layer.get(k, 1) for k in hidden + outputs}, "edges": edges,
+            "bias": {str(k): round(genome.nodes[k].bias, 3) for k in hidden + outputs if k in genome.nodes},
+            "stats": {"hidden_total": sum(1 for k in genome.nodes if k not in outputs),
+                      "conns_total": len(genome.connections), "conns_enabled": len(conns)}}
 
 
 def _jpeg(frame):
@@ -44,7 +47,9 @@ def compute_replay(run_dir, generation, use_cache=True):
     run_dir = Path(run_dir)
     cache = run_dir / "replay_cache" / f"gen_{generation:04d}.json"
     if use_cache and cache.exists():
-        return cache.read_text()
+        text = cache.read_text()
+        if '"bias"' in text or not (run_dir / "neat.cfg").exists():       # replays cached before biases were added are computed again
+            return text
     if not (run_dir / "neat.cfg").exists():       # PPO run: replay the recorded buttons
         return _cache(cache, compute_action_replay(run_dir, generation))
     cfg = config.load(run_dir / "config.toml")
@@ -57,11 +62,12 @@ def compute_replay(run_dir, generation, use_cache=True):
     graph = genome_graph(genome, neat_cfg)
     watch = graph["hidden"] + graph["outputs"]
     env = train._get_env()
+    env.death_map = json.loads((run_dir / "best" / f"gen_{generation:04d}.json").read_text()).get("death_map")
     obs, info = env.reset()
     steps, total = [], 0.0
     while True:
         out = net.activate(obs.ravel().astype(np.float64))
-        action = np.array(out) > 0.5
+        action = env.decide(out)
         steps.append({
             "frame": _jpeg(env.frame),
             "grid": "".join(chr(ord("a") + int(v) + 1) for v in obs.ravel()),  # -1..2 -> a..d

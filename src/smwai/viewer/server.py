@@ -69,9 +69,10 @@ def list_videos(runs_dir):
     for vdir in vdirs:
         run = vdir.parent
         for mp4 in sorted(vdir.glob("*.mp4")):
-            gen = int(mp4.stem.split("_")[-1])
-            rec_file = run / "best" / f"gen_{gen:04d}.json"
-            rec = json.loads(rec_file.read_text()) if rec_file.exists() else {}
+            tail = mp4.stem.split("_")[-1]
+            gen = int(tail) if tail.isdigit() else None            # all_generations.mp4: the stitched video of the whole run
+            rec_file = run / "best" / f"gen_{gen:04d}.json" if gen is not None else None
+            rec = json.loads(rec_file.read_text()) if rec_file and rec_file.exists() else {}
             out.append({"run": run.name, "file": mp4.name, "generation": gen,
                         "fitness": rec.get("fitness"), "max_x": rec.get("max_x"),
                         "cleared": rec.get("cleared"), "size_mb": round(mp4.stat().st_size / 1e6, 1)})

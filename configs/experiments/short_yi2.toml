@@ -1,0 +1,10 @@
+# A short run on Yoshi's Island 2 (collect inputs): NEAT cleared it in 2-6 generations before.
+name = "short-yi2"
+base = "configs/yi2_collect.toml"
+seeds = [1]
+generations = 6
+pop_size = 60
+workers = 12
+
+[[variant]]
+name = "yi2"

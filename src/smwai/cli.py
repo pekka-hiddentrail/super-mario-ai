@@ -24,13 +24,19 @@ def main(argv=None):
     ex = sub.add_parser("experiment", help="run variants x seeds from a spec and summarise")
     ex.add_argument("--spec", required=True)
     ex.add_argument("--runs-dir", default="runs")
-    ex.add_argument("--summary-only", action="store_true", help="do not train, just rebuild the table")
+    ex.add_argument("--summary-only", action="store_true", help="do not train, just rebuild the table (of the latest launch unless --stamp)")
+    ex.add_argument("--stamp", help="continue or summarise an earlier launch, e.g. 20261030-1445 (default: a new launch stamped now)")
 
     vd = sub.add_parser("video", help="render the best run of each training run to mp4")
     vd.add_argument("--runs-dir", default="runs")
     vd.add_argument("--run", help="only this run (folder name)")
     vd.add_argument("--gen", type=int, help="specific generation instead of the best one")
     vd.add_argument("--force", action="store_true", help="re-render even if the video exists")
+
+    st = sub.add_parser("stitch", help="join the generation videos of a run into one video, a held last frame between them")
+    st.add_argument("--runs-dir", default="runs")
+    st.add_argument("--run", required=True, help="run folder name")
+    st.add_argument("--gap", type=float, default=1.0, help="seconds of the last frame held after each video")
 
     r = sub.add_parser("replay", help="re-run a recorded generation headless and check it")
     r.add_argument("run_dir")
@@ -80,7 +86,7 @@ def main(argv=None):
         return serve(args.runs_dir, args.port)
     if args.cmd == "experiment":
         from .experiment import run_experiment
-        run_experiment(args.spec, args.runs_dir, args.summary_only)
+        run_experiment(args.spec, args.runs_dir, args.summary_only, args.stamp)
         return
     if args.cmd == "video":
         from . import video
@@ -94,6 +100,10 @@ def main(argv=None):
                 continue
             print(f"{run.name}: rendering generation {gen} ...", flush=True)
             print("  ->", video.render_run(run, out, generation=gen), flush=True)
+        return
+    if args.cmd == "stitch":
+        from . import video
+        print("->", video.stitch_run(Path(args.runs_dir) / args.run, gap_seconds=args.gap))
         return
     from . import config, train
 

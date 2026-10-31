@@ -2,7 +2,7 @@
 
 A spec (see configs/experiments/) names a base config and a list of variants; each variant
 overrides some settings of the base. Every (variant, seed) is trained in its own process and
-lands in runs/exp-<experiment>-<variant>-s<seed>/, so the dashboard shows it like any other run.
+lands in runs/<stamp>-<experiment>-<variant>-s<seed>/ (stamp = start time, YYYYMMDD-HHMM), so the dashboard shows it like any other run.
 """
 import copy
 import csv
@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import tomllib
+from datetime import datetime
 from pathlib import Path
 
 from . import config
@@ -23,18 +24,27 @@ def merge(base, over):
     return out
 
 
-def plan(spec_path, runs_dir="runs"):
+def latest_stamp(name, runs_dir="runs"):
+    """The stamp of the newest earlier launch of experiment `name` (None if there is none)."""
+    found = sorted(d.name[: -len(name) - 1] for d in (Path(runs_dir) / "_experiments").glob(f"*-{name}")
+                   if d.name[:-len(name) - 1].replace("-", "").isdigit())
+    return found[-1] if found else None
+
+
+def plan(spec_path, runs_dir="runs", stamp=None):
+    """stamp: start time of this launch (default now); pass an earlier one to continue or summarise that launch."""
     spec = tomllib.loads(Path(spec_path).read_text(encoding="utf-8"))
+    stamp = stamp or datetime.now().strftime("%Y%m%d-%H%M")
     base = config.load_raw(spec["base"])
     if "pop_size" in spec:                  # the spec-wide default; a variant may still override it
         base["neat"]["pop_size"] = spec["pop_size"]
-    out_dir = Path(runs_dir) / "_experiments" / spec["name"]
+    out_dir = Path(runs_dir) / "_experiments" / f"{stamp}-{spec['name']}"
     runs = []
     for seed in spec.get("seeds", [1]):          # seed-major: a stopped experiment still compares evenly
         for variant in spec["variant"]:
             overrides = {k: v for k, v in variant.items() if isinstance(v, dict)}
             raw = merge(base, overrides)
-            raw["name"] = f"exp-{spec['name']}-{variant['name']}-s{seed}"
+            raw["name"] = f"{stamp}-{spec['name']}-{variant['name']}-s{seed}"
             raw.setdefault("train", {}).update(
                 seed=seed, generations=spec["generations"], workers=spec.get("workers", 12),
                 runs_dir=runs_dir)
@@ -101,8 +111,10 @@ def format_table(table):
     return "\n".join(lines)
 
 
-def run_experiment(spec_path, runs_dir="runs", summary_only=False):
-    spec, out_dir, runs = plan(spec_path, runs_dir)
+def run_experiment(spec_path, runs_dir="runs", summary_only=False, stamp=None):
+    if summary_only and not stamp:         # rebuild the table of the latest launch
+        stamp = latest_stamp(tomllib.loads(Path(spec_path).read_text(encoding="utf-8"))["name"], runs_dir)
+    spec, out_dir, runs = plan(spec_path, runs_dir, stamp)
     out_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     for i, run in enumerate(runs, 1):

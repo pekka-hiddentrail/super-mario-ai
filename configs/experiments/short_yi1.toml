@@ -1,0 +1,11 @@
+# A short run on Yoshi's Island 1 (collect inputs, adaptive mutation, population 100): seed 4 cleared it at generation 9 in the earlier repeat. Videos of the best run follow.
+# Run: scripts/short_yi12.sh   (log /tmp/short_yi12.log)
+name = "short-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [4]
+generations = 12
+pop_size = 100
+workers = 12
+
+[[variant]]
+name = "yi1"

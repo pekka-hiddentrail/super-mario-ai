@@ -7,6 +7,12 @@ With `start_links` every first-generation genome gets exactly that many links, c
 """
 
 
+def possible_links(gcfg, hidden):
+    """How many links a start can have: input -> hidden, input -> button, hidden -> button."""
+    n_in, n_out = len(gcfg.input_keys), len(gcfg.output_keys)
+    return n_in * (hidden + n_out) + hidden * n_out
+
+
 def add_start_links(genome, gcfg, total, rng):
     """Add `total` links (at least two per hidden node) to a genome that has none yet; returns how many it added."""
     inputs, outputs = list(gcfg.input_keys), list(gcfg.output_keys)

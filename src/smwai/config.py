@@ -70,7 +70,7 @@ min_species_size = {min_species_size}
 """
 
 NEAT_DEFAULTS = dict(
-    pop_size=100, initial_connection="partial_direct 0.05", num_hidden=0, start_links=0, bias_init_mean=0.0, bias_init_stdev=1.0, bias_limit=30.0, weight_init_stdev=1.0, weight_limit=30.0, conn_add_prob=0.5,
+    pop_size=100, initial_connection="partial_direct 0.05", num_hidden=0, start_links=0, start_fraction=0.0, bias_init_mean=0.0, bias_init_stdev=1.0, bias_limit=30.0, weight_init_stdev=1.0, weight_limit=30.0, conn_add_prob=0.5,
     conn_delete_prob=0.2, node_add_prob=0.2, node_delete_prob=0.1, weight_mutate_rate=0.8,
     weight_mutate_power=0.5, compatibility_threshold=3.0, max_stagnation=15,
     survival_threshold=0.2, elitism=2, min_species_size=2)
@@ -142,7 +142,7 @@ class RunConfig:
 
     def neat_text(self):
         neat = dict(self.neat)
-        if neat.get("start_links"):                 # an exact number of links: train.py adds them (start.py), NEAT starts with none
+        if neat.get("start_links") or neat.get("start_fraction"):                 # an exact number of links: train.py adds them (start.py), NEAT starts with none
             neat["initial_connection"] = "unconnected"
         return NEAT_TEMPLATE.format(n_inputs=self.n_inputs, n_outputs=len(BUTTONS), **neat)
 

@@ -1,0 +1,20 @@
+# Screening on Yoshi's Island 1: the small start (8 hidden nodes, 0.24% = 27 links, physics inputs) on 10 seeds, 30 genomes, 80 generations (about 20 minutes each, 3-4 hours in all).
+# Links are removed as often as they are added (conn_delete_prob 0.5), so the network does not keep growing.
+# Videos only of the generations where the best run improved, then one long video per run.
+# Run: scripts/screen_yi1.sh   (log /tmp/screen_yi1.log)
+name = "screen-yi1"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+generations = 80
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "small-start"
+[variant.env]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.0024
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5

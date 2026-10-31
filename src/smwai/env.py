@@ -243,14 +243,17 @@ class SmwEnv(gym.Env):
         return st, build_observation(ram, st, self.cfg, self.death_map, self._memory)
 
     def _close_message(self):
-        """While a message box is open nothing moves and the network cannot do anything about it: hold A until it closes.
+        """While a message box is open nothing moves and the network cannot do anything about it: press A until it closes.
+        A is pressed on every other frame: the game reacts to a new press, not to a held button (a box that opens while the
+        network holds A for a jump ignores a held A for good, measured on Yoshi Island 1 at x 2637).
         These frames are not counted (self.frames, the stuck rule), but a video recording keeps them."""
-        pad = np.zeros(12, dtype=np.int8)
-        pad[self._pad[BUTTONS.index("A")]] = 1
-        for _ in range(MESSAGE_MAX_FRAMES):
+        press = np.zeros(12, dtype=np.int8)
+        press[self._pad[BUTTONS.index("A")]] = 1
+        release = np.zeros(12, dtype=np.int8)
+        for i in range(MESSAGE_MAX_FRAMES):
             if R.u8(R.wram(self._env.unwrapped.get_ram()), R.MESSAGE) == 0:
                 return
-            self.frame = self._env.step(pad)[0]
+            self.frame = self._env.step(press if i % 2 == 0 else release)[0]
             if self.capture is not None:
                 self.capture.append(self.frame.copy())
 

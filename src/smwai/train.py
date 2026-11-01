@@ -163,9 +163,10 @@ class RunReporter(neat.reporting.BaseReporter):
         self.cleared = False                      # did this generation's best run clear the level (read by StopOnClear)
         self.csv = self.dir / "metrics.csv"
         if not self.csv.exists():
-            self.csv.write_text("generation,best,mean,species,max_x,seconds,deterministic,frames,total_frames\n")
+            self.csv.write_text("generation,best,mean,species,max_x,seconds,deterministic,frames,total_frames,top_y\n")
         header = self.csv.read_text().splitlines()[0]
         self.with_frames = "total_frames" in header          # runs started before frame counting keep their format
+        self.with_top_y = "top_y" in header                  # top_y: the highest point (smallest y) the best run reached; older files do not have it
         self.total_frames = 0
         for line in self.csv.read_text().splitlines()[1:]:
             if self.with_frames and line.count(",") >= 8:
@@ -232,6 +233,8 @@ class RunReporter(neat.reporting.BaseReporter):
                f"{info['max_x']},{secs:.1f},{int(deterministic)}")
         if self.with_frames:
             row += f",{frames},{self.total_frames}"
+        if self.with_top_y:
+            row += f",{min((y for _, y in info['path']), default=0)}"
         with open(self.csv, "a") as f:
             f.write(row + "\n")
         flag = "" if deterministic else "  (replay differs!)"

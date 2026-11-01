@@ -1,0 +1,61 @@
+# Yoshi's Island 3 from the four saved climb starts (states/manual_*.state, ordered from the lowest to the highest start: y 288, 224, 160, 112), each standing still and looking right.
+# Baseline reward and setup (as the bias test's bias-30 variant), 30 genomes, 40 generations, 3 seeds, nuke on. Question: can the population learn the climb once it starts at the platform?
+# Run: scripts/climbs_yi3.sh   (log /tmp/climbs_yi3.log)
+name = "climbs-yi3"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24]
+generations = 40
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "climb-1"
+[variant.env]
+levels = ["states/manual_1793527866.state"]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "climb-2"
+[variant.env]
+levels = ["states/manual_1793527876.state"]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "climb-3"
+[variant.env]
+levels = ["states/manual_1793527885.state"]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "climb-4"
+[variant.env]
+levels = ["states/manual_1793527893.state"]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

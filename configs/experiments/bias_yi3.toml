@@ -1,0 +1,51 @@
+# Biases on Yoshi's Island 3 from scratch: the current setup (bias limit 30, so a button can be pinned on or off by its own bias), no biases at all (every bias 0),
+# and biases capped at +-1. 30 genomes, 40 generations, 3 seeds, nuke on. The earlier runs all stopped at x ~545 (fitness ~284 at the edge of the lowest platform).
+# Run: scripts/bias_yi3.sh   (log /tmp/bias_yi3.log)
+name = "bias-yi3"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24]
+generations = 40
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "bias-30"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "no-bias"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+bias_limit = 0.0
+bias_init_stdev = 0.0
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "bias-1"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+bias_limit = 1.0
+[variant.adapt]
+nuke_after = 10

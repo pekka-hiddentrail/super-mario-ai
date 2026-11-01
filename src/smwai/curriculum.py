@@ -3,7 +3,8 @@
 A spec (see configs/experiments/curriculum_yi.toml) names a base config, the levels in order and, per level, the generations and
 genomes. For every seed the population trains on the first level until its best run clears it (or the generations run out), then
 the population NEAT saved that generation (with its network structure, species and innovation numbers) is trained on the next
-level, and so on. A level that is not cleared in time ends the seed. Every level is a normal run folder,
+level, and so on. A level that is not cleared in time ends the seed, or, with `advance_anyway = true` in the spec,
+the population of its last generation moves on to the next level anyway. Every level is a normal run folder,
 runs/<stamp>-<name>-s<seed>-L<n>-<level>/, so videos and the viewer work as usual; the generation numbers keep counting across levels.
 """
 import subprocess
@@ -51,7 +52,11 @@ def run_curriculum(spec_path, runs_dir="runs", stamp=None):
         for run in (r for r in plan if r["seed"] == seed):
             run["config_path"].write_text(config.dump(run["raw"]))
             cmd = [sys.executable, "-W", "ignore", "-m", "smwai.cli", "train", "--config", str(run["config_path"]),
-                   "--run-dir", str(run["run_dir"]), "--stop-on-clear"]
+                   "--run-dir", str(run["run_dir"])]
+            if spec.get("stop_on_clear", True):
+                cmd.append("--stop-on-clear")           # false in the spec: every level uses all its generations
+            if spec.get("advance_anyway") or not spec.get("stop_on_clear", True):
+                cmd.append("--carry-at-end")
             if previous:
                 cmd += ["--resume", str(previous)]
             print(f"seed {seed} level {run['n']} {run['level']}: training {run['run_dir'].name} ...", flush=True)

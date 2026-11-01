@@ -1,0 +1,23 @@
+# Seeds 4, 14, 24, 34: one population through Yoshi's Island 1, 2 and 3, 30 genomes, at most 30 generations per level, nuke on.
+# A level cleared early moves the population on at once; a level not cleared moves it on after 30 generations anyway (advance_anyway).
+# Run: scripts/curriculum_yi123.sh   (log /tmp/curriculum_yi123.log)
+name = "curriculum-yi123"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24, 34]
+generations = 30            # per level
+advance_anyway = true
+pop_size = 30
+workers = 12
+levels = ["YoshiIsland1", "YoshiIsland2", "YoshiIsland3"]
+
+[env]
+inputs = "physics"
+
+[neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+
+[adapt]
+nuke_after = 10

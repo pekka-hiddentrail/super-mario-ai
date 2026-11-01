@@ -14,7 +14,7 @@ def test_plan_is_one_run_per_seed_and_level():
     assert first["raw"]["env"]["levels"] == ["YoshiIsland1"]
     assert first["raw"]["env"]["inputs"] == "physics"
     assert first["raw"]["neat"]["num_hidden"] == 16 and first["raw"]["neat"]["pop_size"] == 15
-    assert first["raw"]["train"]["generations"] == 15
+    assert first["raw"]["train"]["generations"] == 40
     assert plan[1]["raw"]["env"]["levels"] == ["YoshiIsland2"]
 
 

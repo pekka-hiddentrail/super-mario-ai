@@ -373,7 +373,7 @@ class RunReporter(neat.reporting.BaseReporter):
         return f"  novelty {row['novelty_mean']:.2f}  cells {row['coverage']} (+{new_cells})"
 
 
-def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers=None, stop_on_clear=False):
+def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers=None, stop_on_clear=False, carry_at_end=False):
     global _ENV_CFG
     _ENV_CFG = cfg.env
     if cfg.seed is not None:
@@ -413,6 +413,8 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:
         pop.run(evaluator.evaluate, generations or cfg.generations)
+        if carry_at_end:                       # the generations ran out: save the population that would start the next one (carry-<generation>)
+            neat.Checkpointer(None, filename_prefix=str(run_dir / "carry-")).save_checkpoint(pop.config, pop.population, pop.species, pop.generation)
     except LevelCleared:
         print(f"level cleared; the population for the next level is in {run_dir}", flush=True)
     except KeyboardInterrupt:

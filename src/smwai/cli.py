@@ -14,6 +14,7 @@ def main(argv=None):
     t.add_argument("--workers", type=int)
     t.add_argument("--run-dir")
     t.add_argument("--resume", help="path to a ckpt-N file in a run dir (with --run-dir: continue its population in that folder)")
+    t.add_argument("--carry-at-end", action="store_true", help="when the generations run out, save the population (carry-N) so the next level can start from it")
     t.add_argument("--stop-on-clear", action="store_true", help="end the run the generation the best run clears the level")
 
     pp = sub.add_parser("train-ppo", help="train with PPO (stable-baselines3)")
@@ -124,7 +125,7 @@ def main(argv=None):
     if args.cmd == "train":
         cfg = config.load(args.config)
         train.train(cfg, args.config, resume=args.resume, run_dir=args.run_dir,
-                    generations=args.generations, workers=args.workers, stop_on_clear=args.stop_on_clear)
+                    generations=args.generations, workers=args.workers, stop_on_clear=args.stop_on_clear, carry_at_end=args.carry_at_end)
     else:
         run = Path(args.run_dir)
         train._ENV_CFG = config.load(run / "config.toml").env

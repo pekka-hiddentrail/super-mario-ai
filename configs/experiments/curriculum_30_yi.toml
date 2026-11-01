@@ -1,0 +1,19 @@
+# One population through Yoshi's Island 1 and then 2 with the setup that cleared level 1 before: 30 genomes, 8 hidden nodes, 2.5% of all possible links at the start (286), up to 40 generations per level.
+# The population trains on a level until its best run clears it; the same population then starts the next level. A level that is not cleared ends the seed.
+# Run: scripts/curriculum_30_yi.sh   (log /tmp/curriculum_30_yi.log)
+name = "curriculum-30"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3]
+generations = 40            # per level
+pop_size = 30
+workers = 12
+levels = ["YoshiIsland1", "YoshiIsland2"]
+
+[env]
+inputs = "physics"
+
+[neat]
+num_hidden = 8
+start_fraction = 0.025      # 2.5% of the 11,456 possible links = 286
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5

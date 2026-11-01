@@ -63,6 +63,7 @@ class EnvConfig:
     room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
     skip_messages: bool = True    # a message box freezes the game until A or B is pressed: close it by itself, not counted in the frame budget or the stuck rule
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
+    last_chance_frames: int = 0   # >0: in the last N frames before that, the env presses a fresh jump (B) + RIGHT + run for the policy, in case a wall can be hopped over
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
 
@@ -287,6 +288,7 @@ class SmwEnv(gym.Env):
         self.max_x = self.state.x
         self.frames = 0
         self.stuck = 0
+        self._chance_on = False
         self.events = []
         self.best_ground_y = self.state.y        # highest standing position so far (smallest y)
         self._pipes = set()
@@ -300,9 +302,24 @@ class SmwEnv(gym.Env):
         return {"x": self.state.x, "y": self.state.y, "max_x": max([self.max_x, *self.room_max.values()]),
                 "powerup": self.state.powerup, "frames": self.frames}
 
+    def _last_chance(self, action):
+        """last_chance_frames: when the stuck clock is within that many frames of running out, the policy's buttons are replaced by run + RIGHT + a jump:
+        the first step releases B (so the press is a new one), the rest hold it. Progress resets the clock and ends it; the clock itself is not extended."""
+        n = self.cfg.last_chance_frames
+        if n <= 0 or self.stuck < self.cfg.stuck_frames - n:
+            self._chance_on = False
+            return action
+        action = np.array(action, dtype=bool)
+        action[BUTTONS.index("LEFT")] = False
+        action[BUTTONS.index("RIGHT")] = action[BUTTONS.index("Y")] = True
+        action[BUTTONS.index("B")] = self._chance_on
+        self._chance_on = True
+        return action
+
     def step(self, action):
         if self.cfg.cancel_opposites:
             action = cancel_opposites(action)
+        action = self._last_chance(action)
         pad = np.zeros(12, dtype=np.int8)
         for i, on in enumerate(action):
             if on:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One population through Yoshi's Island 1 and 2 (15 genomes, 15 generations per level, 3 seeds), then videos of the improving generations of every level
+# One population through Yoshi's Island 1 and 2 (15 genomes, 40 generations per level, 3 seeds), then videos of the improving generations of every level
 # and one long video per level. Run it as a background job: scripts/curriculum_yi.sh   (log /tmp/curriculum_yi.log)
 . ~/venv/bin/activate
 cd "$(dirname "$0")/.."

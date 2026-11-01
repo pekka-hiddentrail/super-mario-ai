@@ -192,17 +192,48 @@ def _cells(state, view):
             yield row, col, state.x + dx, state.y + dy
 
 
-def solid_grid(ram, state, view=6):
-    """Window grid centred on Mario (rows up..down, columns left..right): 1 where the Map16 tile is solid."""
+def solid_grid(ram, state, view=6, skip_ledges=False):
+    """Window grid centred on Mario (rows up..down, columns left..right): 1 where the Map16 tile is solid.
+    skip_ledges: the pass-through ledges (LEDGE_TILES) are left out; they have a grid of their own (ledge_grid)."""
     grid = np.zeros(grid_shape(view), dtype=np.int8)
     for row, col, wx, wy in _cells(state, view):
         tx, ty = (wx + 8) // 16, wy // 16
         if wx < 0 or wy < 0 or ty >= 27:
             continue
         idx = MAP16_HIGH + (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
-        if idx < len(ram) and ram[idx] == 1:
+        if idx < len(ram) and ram[idx] == 1 and not (skip_ledges and ram[MAP16_LOW + idx - MAP16_HIGH] in LEDGE_TILES):
             grid[row, col] = SOLID
     return grid
+
+
+def ledge_grid(ram, state, view=6, swing=False):
+    """Window grid centred on Mario: 1 on the pass-through ledges (LEDGE_TILES) and on the blocks of the moving platforms (the rotating one included
+    with swing=True): the places Mario can jump up through and stand on."""
+    grid = np.zeros(grid_shape(view), dtype=np.int8)
+    for row, col, wx, wy in _cells(state, view):
+        tx, ty = (wx + 8) // 16, wy // 16
+        if wx < 0 or wy < 0 or ty >= 27:
+            continue
+        off = (tx // 16) * TILES_PER_PAGE + ty * 16 + tx % 16
+        if MAP16_HIGH + off < len(ram) and ram[MAP16_HIGH + off] == 1 and ram[MAP16_LOW + off] in LEDGE_TILES:
+            grid[row, col] = 1
+    return np.maximum(grid, platform_grid(state, view, swing))
+
+
+def ledge_key(ram, state, swing=False):
+    """Which ledge is Mario standing on? A run of ledge tiles in one row is one ledge, the rotating platform is one; None when he stands on neither."""
+    if swing and standing_on_swing(state) is not None:
+        return "swing"
+    if state.in_air:
+        return None
+    cx, py = state.x + 8, state.y + 32 + 1
+    if not ledge_at(ram, cx, py):
+        return None
+    for _ in range(64):
+        if not ledge_at(ram, cx - 16, py):
+            break
+        cx -= 16
+    return (int(cx) // 16, int(py) // 16)
 
 
 def coin_grid(ram, state, view=6):
@@ -279,6 +310,15 @@ def _tile_offset(px, py):
 def solid_at(ram, px, py):
     off = _tile_offset(px, py)
     return off is not None and MAP16_HIGH + off < len(ram) and ram[MAP16_HIGH + off] == 1
+
+
+LEDGE_TILES = range(0x00, 0x10)    # Map16 0x100-0x10F: the green ledges of Yoshi's Island. Mario jumps up through them and lands on top (measured on Yoshi Island 3:
+                                   # a full jump from the ground below a ledge ends standing on it). The map flags them solid like a wall, but they are not one from below or the side.
+
+
+def ledge_at(ram, px, py):
+    off = _tile_offset(px, py)
+    return off is not None and MAP16_HIGH + off < len(ram) and ram[MAP16_HIGH + off] == 1 and ram[MAP16_LOW + off] in LEDGE_TILES
 
 
 def coin_at(ram, px, py):

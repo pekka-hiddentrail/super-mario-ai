@@ -42,10 +42,11 @@ def _clip(v, lo, hi):
     return int(max(lo, min(hi, round(v))))
 
 
-def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=False, moving=None):
+def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=False, moving=None, ledges=False):
     """One jump option. ceilings=True: rising into a solid tile or platform block bumps the head (the rise stops), so a jump from
-    below a platform no longer 'lands on top of it'."""
+    below a platform no longer 'lands on top of it'. ledges=True: ledge tiles (R.LEDGE_TILES) are no ceiling and no wall."""
     cx0, feet0 = state.x + 8, state.y + FEET
+    hard = (lambda x, y: R.solid_at(ram, x, y) and not R.ledge_at(ram, x, y)) if ledges else (lambda x, y: R.solid_at(ram, x, y))
     coins, hit = set(), 0
     vy, dy = vy0, 0.0
     cx = cx0
@@ -54,7 +55,7 @@ def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=Fal
             blocks = moving[min(t + 1, len(moving) - 1)]           # where the platforms will be during this frame
         if walls:                                              # running into a solid tile at body height stops the sideways motion
             nxt = cx + state.x_speed / 16
-            if state.x_speed and R.solid_at(ram, nxt + (7 if state.x_speed > 0 else -7), feet0 + dy - 16):
+            if state.x_speed and hard(nxt + (7 if state.x_speed > 0 else -7), feet0 + dy - 16):
                 nxt = cx
             cx = nxt
         else:
@@ -62,7 +63,7 @@ def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=Fal
         step = vy / 16
         if ceilings and vy < 0:
             head = feet0 + dy + step - FEET
-            if R.solid_at(ram, cx, head) or R.on_platform(blocks, cx, head):
+            if hard(cx, head) or R.on_platform(blocks, cx, head):
                 vy, step = 0, 0.0                              # head bump: no more rise, the arc turns down
         dy += step
         feet = feet0 + dy
@@ -83,17 +84,18 @@ def _option(ram, state, vy0, hold, enemies, blocks=(), ceilings=False, walls=Fal
 REACH_HOLDS = (1, 5, 10, 15, 20, 25)         # button hold times of the arcs of the reach map (frames)
 
 
-def _land(ram, state, x_speed, vy0, hold, blocks=(), ceilings=False, walls=False, moving=None):
+def _land(ram, state, x_speed, vy0, hold, blocks=(), ceilings=False, walls=False, moving=None, ledges=False):
     """Where does this arc come down? (x, feet y) of the point that enters the solid tile or platform, or None when it falls into a pit.
-    The same arc as _option, with the sideways speed given: no enemies, no coins."""
+    The same arc as _option, with the sideways speed given: no enemies, no coins. ledges=True: ledge tiles (R.LEDGE_TILES) are no ceiling and no wall."""
     cx0, feet0 = state.x + 8, state.y + FEET
+    hard = (lambda x, y: R.solid_at(ram, x, y) and not R.ledge_at(ram, x, y)) if ledges else (lambda x, y: R.solid_at(ram, x, y))
     vy, dy, cx = vy0, 0.0, cx0
     for t in range(100):
         if moving:
             blocks = moving[min(t + 1, len(moving) - 1)]
         if walls:
             nxt = cx + x_speed / 16
-            if x_speed and R.solid_at(ram, nxt + (7 if x_speed > 0 else -7), feet0 + dy - 16):
+            if x_speed and hard(nxt + (7 if x_speed > 0 else -7), feet0 + dy - 16):
                 nxt = cx
             cx = nxt
         else:
@@ -101,7 +103,7 @@ def _land(ram, state, x_speed, vy0, hold, blocks=(), ceilings=False, walls=False
         step = vy / 16
         if ceilings and vy < 0:
             head = feet0 + dy + step - FEET
-            if R.solid_at(ram, cx, head) or R.on_platform(blocks, cx, head):
+            if hard(cx, head) or R.on_platform(blocks, cx, head):
                 vy, step = 0, 0.0
         dy += step
         feet = feet0 + dy
@@ -112,6 +114,21 @@ def _land(ram, state, x_speed, vy0, hold, blocks=(), ceilings=False, walls=False
         gravity = physics.GRAVITY_HELD if (t + 1 < hold and vy < physics.HELD_LIMIT) else physics.GRAVITY_FREE
         vy = min(vy + gravity, physics.TERMINAL)
     return None
+
+
+def higher_landings(ram, state, min_rise=12):
+    """From the ground: where the jumps that come down at least min_rise pixels higher than Mario stands now would land, as (x, feet y).
+    The same arcs as the reach map (A and B, REACH_HOLDS, from the speed he has and from full run speed both ways), with ceilings and walls
+    in the way. An empty list means that nothing higher up is within reach of any jump from here."""
+    feet0 = state.y + FEET
+    found = []
+    for speed in dict.fromkeys((state.x_speed, RUN_SPEED, -RUN_SPEED)):
+        for button in BUTTONS_MODELLED:
+            for hold in REACH_HOLDS:
+                hit = _land(ram, state, speed, physics.takeoff_for(button, speed), hold, (), True, True, None, True)
+                if hit is not None and hit[1] <= feet0 - min_rise:
+                    found.append(hit)
+    return found
 
 
 def reach_grid(ram, state, view, ride=False, ceilings=False, fixed=False, predict=False, swing=False, anchor=None, t0=0, riding=None):
@@ -198,7 +215,7 @@ def _scene(state, ride, fixed, swing=False):
     return enemies, (R.platform_blocks(state, 0, swing) if ride else ())
 
 
-def features(ram, state, ride=False, ceilings=False, fixed=False, predict=False, swing=False):
+def features(ram, state, ride=False, ceilings=False, fixed=False, predict=False, swing=False, ledges=False):
     """The 30 jump-option values, in the order of names(). ride=True: moving platforms are ground, not enemies."""
     enemies, blocks = _scene(state, ride, fixed, swing)
     moving = _moving(state, ride, predict, swing, 0, R.standing_on_swing(state) is not None)
@@ -206,7 +223,7 @@ def features(ram, state, ride=False, ceilings=False, fixed=False, predict=False,
     for button in BUTTONS_MODELLED:
         for hold in HOLDS:
             vy0 = state.y_speed if state.in_air else physics.takeoff_for(button, state.x_speed)
-            out += _option(ram, state, vy0, hold, enemies, blocks, ceilings, walls=fixed, moving=moving)
+            out += _option(ram, state, vy0, hold, enemies, blocks, ceilings, walls=fixed, moving=moving, ledges=ledges)
     return np.array(out, dtype=np.int8)
 
 

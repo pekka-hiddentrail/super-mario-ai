@@ -13,7 +13,9 @@ def main(argv=None):
     t.add_argument("--generations", type=int)
     t.add_argument("--workers", type=int)
     t.add_argument("--run-dir")
-    t.add_argument("--resume", help="path to a ckpt-N file in a run dir")
+    t.add_argument("--resume", help="path to a ckpt-N file in a run dir (with --run-dir: continue its population in that folder)")
+    t.add_argument("--carry-at-end", action="store_true", help="when the generations run out, save the population (carry-N) so the next level can start from it")
+    t.add_argument("--stop-on-clear", action="store_true", help="end the run the generation the best run clears the level")
 
     pp = sub.add_parser("train-ppo", help="train with PPO (stable-baselines3)")
     pp.add_argument("--config", default="configs/ppo_level1.toml")
@@ -26,6 +28,11 @@ def main(argv=None):
     ex.add_argument("--runs-dir", default="runs")
     ex.add_argument("--summary-only", action="store_true", help="do not train, just rebuild the table (of the latest launch unless --stamp)")
     ex.add_argument("--stamp", help="continue or summarise an earlier launch, e.g. 20261030-1445 (default: a new launch stamped now)")
+
+    cu = sub.add_parser("curriculum", help="one population through several levels: it moves on the moment a level is cleared")
+    cu.add_argument("--spec", required=True)
+    cu.add_argument("--runs-dir", default="runs")
+    cu.add_argument("--stamp", help="stamp of the launch (default: now)")
 
     vd = sub.add_parser("video", help="render the best run of each training run to mp4")
     vd.add_argument("--runs-dir", default="runs")
@@ -88,6 +95,10 @@ def main(argv=None):
         from .experiment import run_experiment
         run_experiment(args.spec, args.runs_dir, args.summary_only, args.stamp)
         return
+    if args.cmd == "curriculum":
+        from .curriculum import run_curriculum
+        run_curriculum(args.spec, args.runs_dir, args.stamp)
+        return
     if args.cmd == "video":
         from . import video
         runs = [Path(args.runs_dir) / args.run] if args.run else sorted(
@@ -114,7 +125,7 @@ def main(argv=None):
     if args.cmd == "train":
         cfg = config.load(args.config)
         train.train(cfg, args.config, resume=args.resume, run_dir=args.run_dir,
-                    generations=args.generations, workers=args.workers)
+                    generations=args.generations, workers=args.workers, stop_on_clear=args.stop_on_clear, carry_at_end=args.carry_at_end)
     else:
         run = Path(args.run_dir)
         train._ENV_CFG = config.load(run / "config.toml").env

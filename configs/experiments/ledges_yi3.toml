@@ -1,0 +1,140 @@
+# Yoshi's Island 3 from three of the saved climb starts, with the ledge model fixed (ledges are pass-through): 'up' (x 78, y 288: a jump straight up through the ledge above),
+# 'edge' (x 289, y 352: the end of the lowest platform, where the runs stop; the way up is behind), 'behind' (x 175, y 352: the ledge is 4-6 tiles back and 3-4 up).
+# Three setups on each: 'opp' = physics inputs + the opportunity bonus (1 per pixel climbed), 'ledges' = the new ledge input grid (no extra reward),
+# 'ledge-bonus' = the ledge grid + a flat 40 points the first time Mario stands on each ledge. Compare with the baseline of climbs_yi3 (physics inputs, no climb reward).
+# 30 genomes, 40 generations, 3 seeds, nuke on. Run: scripts/ledges_yi3.sh   (log /tmp/ledges_yi3.log)
+name = "ledges-yi3"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24]
+generations = 40
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "opp-up"
+[variant.env]
+levels = ["states/manual_1793527866.state"]
+inputs = "physics"
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "opp-edge"
+[variant.env]
+levels = ["states/manual_1793528354.state"]
+inputs = "physics"
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "opp-behind"
+[variant.env]
+levels = ["states/manual_1793528387.state"]
+inputs = "physics"
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "ledges-up"
+[variant.env]
+levels = ["states/manual_1793527866.state"]
+inputs = "ledges"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "ledges-edge"
+[variant.env]
+levels = ["states/manual_1793528354.state"]
+inputs = "ledges"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "ledges-behind"
+[variant.env]
+levels = ["states/manual_1793528387.state"]
+inputs = "ledges"
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "ledge-bonus-up"
+[variant.env]
+levels = ["states/manual_1793527866.state"]
+inputs = "ledges"
+[variant.reward]
+ledge_bonus = 40.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "ledge-bonus-edge"
+[variant.env]
+levels = ["states/manual_1793528354.state"]
+inputs = "ledges"
+[variant.reward]
+ledge_bonus = 40.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "ledge-bonus-behind"
+[variant.env]
+levels = ["states/manual_1793528387.state"]
+inputs = "ledges"
+[variant.reward]
+ledge_bonus = 40.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

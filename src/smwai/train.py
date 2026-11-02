@@ -117,6 +117,28 @@ class PoolEvaluator:
             self.pool.terminate()
 
 
+class LevelCleared(Exception):
+    """Raised by StopOnClear: the best run of the generation cleared the level."""
+
+
+class StopOnClear(neat.reporting.BaseReporter):
+    """Ends the level the generation its best run clears it, after saving the population for the next level (<run dir>/carry-<generation>).
+    It saves the children of that generation (NEAT's usual checkpoint), so the winner is still in it as an elite."""
+
+    def __init__(self, run_dir, reporter):
+        self.reporter = reporter
+        self.saver = neat.Checkpointer(None, filename_prefix=str(Path(run_dir) / "carry-"))
+        self.generation = 0
+
+    def start_generation(self, generation):
+        self.generation = generation
+
+    def end_generation(self, config, population, species_set):
+        if self.reporter.cleared:
+            self.saver.save_checkpoint(config, population, species_set, self.generation + 1)
+            raise LevelCleared()
+
+
 class RunReporter(neat.reporting.BaseReporter):
     """Writes metrics.csv and records the best run of every generation."""
 
@@ -138,11 +160,13 @@ class RunReporter(neat.reporting.BaseReporter):
         self.generation = -1
         self.gen_start = time.time()
         self.best_ever = -np.inf
+        self.cleared = False                      # did this generation's best run clear the level (read by StopOnClear)
         self.csv = self.dir / "metrics.csv"
         if not self.csv.exists():
-            self.csv.write_text("generation,best,mean,species,max_x,seconds,deterministic,frames,total_frames\n")
+            self.csv.write_text("generation,best,mean,species,max_x,seconds,deterministic,frames,total_frames,top_y\n")
         header = self.csv.read_text().splitlines()[0]
         self.with_frames = "total_frames" in header          # runs started before frame counting keep their format
+        self.with_top_y = "top_y" in header                  # top_y: the highest point (smallest y) the best run reached; older files do not have it
         self.total_frames = 0
         for line in self.csv.read_text().splitlines()[1:]:
             if self.with_frames and line.count(",") >= 8:
@@ -188,6 +212,7 @@ class RunReporter(neat.reporting.BaseReporter):
         _get_env().death_map = self.stats.get("death_map")          # the memory this generation's genomes had
         reward, actions, info = run_episode(best, config, record=True)
         deterministic = abs(reward - best.fitness) < 1e-6
+        self.cleared = bool(info["cleared"])
         stem = self.dir / "best" / f"gen_{self.generation:04d}"
         with open(stem.with_suffix(".pkl"), "wb") as f:
             pickle.dump(best, f)
@@ -208,6 +233,8 @@ class RunReporter(neat.reporting.BaseReporter):
                f"{info['max_x']},{secs:.1f},{int(deterministic)}")
         if self.with_frames:
             row += f",{frames},{self.total_frames}"
+        if self.with_top_y:
+            row += f",{min((y for _, y in info['path']), default=0)}"
         with open(self.csv, "a") as f:
             f.write(row + "\n")
         flag = "" if deterministic else "  (replay differs!)"
@@ -349,22 +376,29 @@ class RunReporter(neat.reporting.BaseReporter):
         return f"  novelty {row['novelty_mean']:.2f}  cells {row['coverage']} (+{new_cells})"
 
 
-def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers=None):
+def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers=None, stop_on_clear=False, carry_at_end=False):
     global _ENV_CFG
     _ENV_CFG = cfg.env
     if cfg.seed is not None:
         random.seed(cfg.seed)          # neat-python uses the global random module
-    if resume:
+    if resume and not run_dir:
         run_dir = Path(resume).parent
     else:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         run_dir = Path(run_dir or Path(cfg.runs_dir) / f"{cfg.name}-{stamp}")
+    if not resume or not (run_dir / "neat.cfg").exists():     # a resume into a new folder (the next level) starts one
         run_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy(config_path, run_dir / "config.toml")
         (run_dir / "neat.cfg").write_text(cfg.neat_text())
     neat_cfg = neat.Config(neat.DefaultGenome, neat.DefaultReproduction, neat.DefaultSpeciesSet,
                            neat.DefaultStagnation, str(run_dir / "neat.cfg"))
     pop = neat.Checkpointer.restore_checkpoint(resume) if resume else neat.Population(neat_cfg)
+    if not resume and (cfg.neat.get("start_links") or cfg.neat.get("start_fraction")):
+        from .start import add_start_links, possible_links
+        gcfg = neat_cfg.genome_config
+        total = int(cfg.neat.get("start_links") or 0) or round(cfg.neat["start_fraction"] * possible_links(gcfg, int(cfg.neat.get("num_hidden", 0))))
+        for genome in pop.population.values():
+            add_start_links(genome, gcfg, total, random)
     n_workers = cfg.workers if workers is None else workers
     # the pool must fork before this process creates its own emulator
     stats = {"frames": 0}
@@ -373,12 +407,19 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
         evaluator = HybridEvaluator(n_workers, stats, cfg.env, cfg.hybrid, run_dir / "hybrid.jsonl")
     else:
         evaluator = PoolEvaluator(n_workers, stats)
-    pop.add_reporter(RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty,
-                                  cfg.env.death_inputs or cfg.env.takeoff_inputs, cfg.live, cfg.env.death_nodes))
+    reporter = RunReporter(run_dir, pop.config, stats, cfg.adapt, cfg.novelty,
+                           cfg.env.death_inputs or cfg.env.takeoff_inputs, cfg.live, cfg.env.death_nodes)
+    pop.add_reporter(reporter)
     pop.add_reporter(neat.Checkpointer(cfg.checkpoint_every, filename_prefix=str(run_dir / "ckpt-")))
+    if stop_on_clear:
+        pop.add_reporter(StopOnClear(run_dir, reporter))
     print(f"run dir: {run_dir}  workers: {n_workers}", flush=True)
     try:
         pop.run(evaluator.evaluate, generations or cfg.generations)
+        if carry_at_end:                       # the generations ran out: save the population that would start the next one (carry-<generation>)
+            neat.Checkpointer(None, filename_prefix=str(run_dir / "carry-")).save_checkpoint(pop.config, pop.population, pop.species, pop.generation)
+    except LevelCleared:
+        print(f"level cleared; the population for the next level is in {run_dir}", flush=True)
     except KeyboardInterrupt:
         print("\ninterrupted; results so far are in", run_dir)
     finally:

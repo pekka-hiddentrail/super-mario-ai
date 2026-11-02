@@ -1,0 +1,38 @@
+# Short check that the current setup (physics inputs, opportunity bonus 1.0, nuke on) also works on Yoshi's Island 1 and 2 from their real starts:
+# seeds 4 and 14, 30 genomes, 20 generations. Run: scripts/check_yi12.sh   (log /tmp/check_yi12.log)
+name = "check-yi12"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14]
+generations = 20
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "yi1"
+[variant.env]
+levels = ["YoshiIsland1"]
+inputs = "physics"
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "yi2"
+[variant.env]
+levels = ["YoshiIsland2"]
+inputs = "physics"
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

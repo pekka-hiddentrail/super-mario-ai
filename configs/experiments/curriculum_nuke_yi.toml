@@ -1,0 +1,21 @@
+# curriculum-30 with the nuke switched on: after 10 generations without a gain, 70% of the new children are rewritten (best genome x another species' best), cooldown 10.
+# 3 seeds, 60 generations per level. Run: scripts/curriculum_nuke_yi.sh   (log /tmp/curriculum_nuke_yi.log)
+name = "curriculum-nuke"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3]
+generations = 60            # per level
+pop_size = 30
+workers = 12
+levels = ["YoshiIsland1", "YoshiIsland2"]
+
+[env]
+inputs = "physics"
+
+[neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+
+[adapt]
+nuke_after = 10

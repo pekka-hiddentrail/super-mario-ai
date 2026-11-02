@@ -1,0 +1,24 @@
+# Yoshi's Island 3 from its real start with the doubled opportunity bonus (the best of yi3_start: mean best x 1022 against 617 for bonus 1.0), 3 seeds x 40 genomes x 150 generations,
+# physics inputs, last_chance_frames 32, nuke on. Run: scripts/yi3_long.sh   (log /tmp/yi3_long.log)
+name = "yi3-long"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24]
+generations = 150
+pop_size = 40
+workers = 12
+
+[[variant]]
+name = "double"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

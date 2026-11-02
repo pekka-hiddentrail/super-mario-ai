@@ -3,3 +3,4 @@
 *.py text eol=lf
 *.json text eol=lf
 *.html linguist-vendored
+*.sh text eol=lf

@@ -1,0 +1,23 @@
+# Seeds 4, 14, 24, 34: one population through Yoshi's Island 2 (easy), then 1, then 3, 30 genomes, 40 generations on EVERY level (no stop on a clear), nuke on.
+# The idea: a population that has spent a full 40 generations on the easier levels is better established when it reaches the hardest one.
+# Run: scripts/curriculum_213.sh   (log /tmp/curriculum_213.log)
+name = "curriculum-213"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24, 34]
+generations = 40            # per level, always all of them
+stop_on_clear = false
+pop_size = 30
+workers = 12
+levels = ["YoshiIsland2", "YoshiIsland1", "YoshiIsland3"]
+
+[env]
+inputs = "physics"
+
+[neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+
+[adapt]
+nuke_after = 10

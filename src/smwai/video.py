@@ -20,7 +20,7 @@ PANEL_W = 560
 BG = (20, 22, 26)
 MUTED, TEXT, ACCENT = (139, 147, 161), (230, 232, 236), (90, 169, 255)
 POS, NEG = (63, 185, 80), (248, 81, 73)
-GRID_COLORS = {"solid": (154, 163, 178), "enemy": (248, 81, 73), "item": (188, 140, 255), "coin": (242, 204, 96), "pipe": (63, 185, 80), "platform": (232, 131, 58), "reach": (88, 166, 255), "reach_wait": (63, 220, 200)}
+GRID_COLORS = {"solid": (154, 163, 178), "enemy": (248, 81, 73), "item": (188, 140, 255), "coin": (242, 204, 96), "pipe": (63, 185, 80), "platform": (232, 131, 58), "ledge": (232, 131, 58), "reach": (88, 166, 255), "reach_wait": (63, 220, 200)}
 
 
 def best_generation(run_dir):
@@ -103,11 +103,17 @@ class NetworkPanel:
                 self.groups.append(("label", prefix, 0, 10, y + r * 12))
                 for k, (i, field) in enumerate(items):
                     self._text_item(i, field, label_w + k * 76, y + r * 12)
-        for h in graph["hidden"]:            # hidden nodes sit at a random place between the input grids and the buttons (the same one in every video: seeded by the node id)
-            rnd = random.Random(f"hidden-{h}")
-            self.pos[h] = ((190 + rnd.random() * 260) / PANEL_W * self.lw, 50 + rnd.random() * (self.lh - 100))
         for i, o in enumerate(graph["outputs"]):
             self.pos[o] = (436 / PANEL_W * self.lw, 56 + (i + 0.5) * (self.lh - 110) / len(graph["outputs"]))
+        gap = 100 / self.zoom                # hidden nodes keep 100 px (as shown) from the input grids, the buttons, the 'Network' line above and the value texts below
+        grid_right = max([x + self.cols * self.cell for kind, _n, _i, x, _y in self.groups if kind == "grid"], default=10)
+        x0, x1 = grid_right + gap, 436 / PANEL_W * self.lw - gap
+        y0, y1 = gap, self.lh - gap
+        x0, x1 = (x0, x1) if x0 < x1 else ((x0 + x1) / 2,) * 2
+        y0, y1 = (y0, y1) if y0 < y1 else ((y0 + y1) / 2,) * 2
+        for h in graph["hidden"]:            # a random place inside that area (the same one in every video: seeded by the node id)
+            rnd = random.Random(f"hidden-{h}")
+            self.pos[h] = (x0 + rnd.random() * (x1 - x0), y0 + rnd.random() * (y1 - y0))
 
     def _text_item(self, input_index, label, x, y):
         key = self.graph["inputs"][input_index]

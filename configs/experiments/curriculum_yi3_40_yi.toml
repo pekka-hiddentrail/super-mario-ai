@@ -1,0 +1,24 @@
+# Seeds 4, 14, 24 on Yoshi's Island 3 only, from the very start of the level (no saved state, no earlier levels): 40 genomes, 40 generations, physics inputs, opportunity bonus 1.0 (1 per pixel climbed), nuke on.
+# Run: scripts/long_ledges_yi3.sh   (log /tmp/long_ledges_yi3.log)
+name = "yi3-40x40"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24]
+generations = 40
+pop_size = 40
+workers = 12
+levels = ["YoshiIsland3"]
+
+[reward]
+opportunity_bonus = 1.0
+
+[env]
+inputs = "physics"
+
+[neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+
+[adapt]
+nuke_after = 10

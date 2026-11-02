@@ -219,3 +219,74 @@ def test_message_box_flag():
     assert R.read_state(w).message == 0
     w[R.MESSAGE] = 2
     assert R.read_state(w).message == 2
+
+
+def test_riding_flag_is_read():
+    w = make_wram()
+    assert R.read_state(w).riding == 0
+    w[R.RIDING] = 3
+    assert R.read_state(w).riding == 3
+
+
+def test_generic_platforms_are_ground_not_enemies():
+    sps = [R.Sprite(x=1355, y=208, number=0x55, is_item=False, vx=0.5), R.Sprite(x=900, y=100, number=0x09, is_item=False)]
+    st = R.read_state(make_wram())
+    st.sprites, st.x, st.y = sps, 1360, 176
+    enemy, _ = R.sprite_grids(st, 6)
+    assert enemy.sum() == 1 and R.platform_blocks(st) == [] and R.nearest_platform(st) is None     # not marked: as before
+    R.mark_platforms(sps)
+    assert [s.kind for s in sps] == ["platform", "enemy"]
+    enemy, _ = R.sprite_grids(st, 6)
+    assert enemy.sum() == 0                                                                          # the platform is no enemy; the sprite far away is outside the view
+    blocks = R.platform_blocks(st)
+    assert len(blocks) == 6 and blocks[0][1] == 208 and blocks[0][0] == 1355 - 8
+    assert R.platform_blocks(st, 20)[0][0] == blocks[0][0] + 10                                    # moves with its speed
+    assert R.nearest_platform(st)[2] == 0.5
+
+
+def test_riding_platform_needs_the_flag_the_feet_and_the_extent():
+    sp = R.Sprite(x=1355, y=208, number=0x55, is_item=False)
+    R.mark_platforms([sp])
+    st = R.read_state(make_wram())
+    st.sprites, st.x, st.y, st.in_air, st.riding = [sp], 1380, 208 - 32, False, 1
+    assert R.riding_platform(st) is sp
+    st.riding = 0
+    assert R.riding_platform(st) is None
+    st.riding, st.x = 1, 1355 + 200
+    assert R.riding_platform(st) is None
+    st.x, st.y = 1380, 208 - 80
+    assert R.riding_platform(st) is None
+
+
+def test_big_coin_shows_in_the_coin_grid_only_when_asked():
+    w = make_wram()
+    st = R.read_state(w)
+    st.x, st.y = 0x100, 0x100
+    idx = lambda wx, wy: (wx // 256) * R.TILES_PER_PAGE + (wy // 16) * 16 + (wx % 256) // 16
+    w[R.MAP16_LOW + idx(0x108, 0x100)] = R.COIN_TILE
+    w[R.MAP16_LOW + idx(0x118, 0x100)] = 0x2D
+    w[R.MAP16_LOW + idx(0x118, 0x110)] = 0x2E
+    assert R.coin_grid(w, st).sum() == 1                    # as before: the ordinary coin only
+    g = R.coin_grid(w, st, big=True)
+    assert sorted(set(g.ravel())) == [0, 1, 2] and (g == 2).sum() == 2
+
+
+def test_flying_box_is_a_platform_with_the_flag():
+    sp = R.Sprite(x=573, y=309, number=0x83, is_item=False, vx=-0.7)
+    st = R.read_state(make_wram())
+    st.sprites, st.x, st.y = [sp], 560, 276
+    assert R.platform_blocks(st) == []
+    R.mark_platforms(st.sprites)
+    assert len(R.platform_blocks(st)) == 1 and R.sprite_grids(st, 6)[0].sum() == 0
+
+
+def test_turn_block_is_told_from_other_solid_tiles_only_when_asked():
+    w = make_wram()
+    st = R.read_state(w)
+    st.x, st.y = 0x100, 0x100
+    idx = lambda wx, wy: (wx // 256) * R.TILES_PER_PAGE + (wy // 16) * 16 + (wx % 256) // 16
+    for wx, low in ((0x108, 0x30), (0x118, 0x1E)):                 # a stone block (0x130) and a turn block (0x11E)
+        w[R.MAP16_HIGH + idx(wx, 0x110)], w[R.MAP16_LOW + idx(wx, 0x110)] = 1, low
+    assert sorted(set(R.solid_grid(w, st).ravel())) == [0, 1]
+    g = R.solid_grid(w, st, kinds=True)
+    assert (g == 1).sum() == 1 and (g == 2).sum() == 1

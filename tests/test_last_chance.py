@@ -3,10 +3,11 @@ import numpy as np
 from smwai.env import BUTTONS, EnvConfig, SmwEnv
 
 
-def env(stuck, chance=30):
+def env(stuck, chance=30, wall=True):
     e = SmwEnv.__new__(SmwEnv)
     e.cfg = EnvConfig(stuck_frames=120, last_chance_frames=chance)
     e.stuck, e._chance_on = stuck, False
+    e._wall_ahead = lambda: wall
     return e
 
 
@@ -30,3 +31,13 @@ def test_window_runs_right_and_jumps_with_a_fresh_press():
     assert pressed(e._last_chance(held)) == {"B", "RIGHT", "Y"}         # then held: a new jump
     e.stuck = 0                                                         # progress: the window ends and re-arms
     assert pressed(e._last_chance(held)) == {"B", "LEFT"} and not e._chance_on
+
+
+def test_no_wall_no_jump_until_one_is_there():
+    e = env(100, wall=False)
+    idle = np.zeros(len(BUTTONS), dtype=bool)
+    assert pressed(e._last_chance(idle)) == set() and not e._chance_on
+    e._wall_ahead = lambda: True
+    assert pressed(e._last_chance(idle)) == {"RIGHT", "Y"} and e._chance_on
+    e._wall_ahead = lambda: False                                       # in the air the wall is below him: it runs on
+    assert pressed(e._last_chance(idle)) == {"B", "RIGHT", "Y"}

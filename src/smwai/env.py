@@ -63,7 +63,7 @@ class EnvConfig:
     room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
     skip_messages: bool = True    # a message box freezes the game until A or B is pressed: close it by itself, not counted in the frame budget or the stuck rule
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
-    last_chance_frames: int = 0   # >0: in the last N frames before that, the env presses a fresh jump (B) + RIGHT + run for the policy, in case a wall can be hopped over
+    last_chance_frames: int = 0   # >0: in the last N frames before that, with a wall right in front of Mario, the env presses a fresh jump (B) + RIGHT + run for the policy
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
 
@@ -302,12 +302,21 @@ class SmwEnv(gym.Env):
         return {"x": self.state.x, "y": self.state.y, "max_x": max([self.max_x, *self.room_max.values()]),
                 "powerup": self.state.powerup, "frames": self.frames}
 
+    def _wall_ahead(self):
+        """A hard (not pass-through) tile just past Mario's right edge, at his lower body: he is standing against a wall."""
+        ram = R.wram(self._env.unwrapped.get_ram())
+        px, feet = self.state.x + 20, self.state.y + 32
+        return any(R.solid_at(ram, px, feet - d) and not R.ledge_at(ram, px, feet - d) for d in (4, 20))
+
     def _last_chance(self, action):
-        """last_chance_frames: when the stuck clock is within that many frames of running out, the policy's buttons are replaced by run + RIGHT + a jump:
-        the first step releases B (so the press is a new one), the rest hold it. Progress resets the clock and ends it; the clock itself is not extended."""
+        """last_chance_frames: when the stuck clock is within that many frames of running out and a wall stands right in front of Mario, the policy's buttons are
+        replaced by run + RIGHT + a jump: the first step releases B (so the press is a new one), the rest hold it. Once started it runs on (in the air the wall is
+        below him). Progress resets the clock and ends it; the clock itself is not extended."""
         n = self.cfg.last_chance_frames
         if n <= 0 or self.stuck < self.cfg.stuck_frames - n:
             self._chance_on = False
+            return action
+        if not self._chance_on and not self._wall_ahead():
             return action
         action = np.array(action, dtype=bool)
         action[BUTTONS.index("LEFT")] = False

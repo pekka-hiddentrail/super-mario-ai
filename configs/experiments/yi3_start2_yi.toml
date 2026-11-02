@@ -1,0 +1,64 @@
+# Yoshi's Island 3 from its real start, redone with the corrected last chance (the forced jump only when a wall stands right in front of Mario; the first test, yi3-start,
+# jumped whenever the clock ran low and is void). Seeds 14 and 24, 40 genomes, 40 generations, physics inputs, nuke on. One change at a time: 'double' = opportunity bonus 2.0;
+# 'sparse' = a sparser, quieter start (start_fraction 0.005, bias_init_stdev 0.1); 'both' = the two together. No 'base' variant (the user's choice).
+# Run: scripts/yi3_start2.sh   (log /tmp/yi3_start2.log)
+name = "yi3-start2"
+base = "configs/yi1_adaptive.toml"
+seeds = [14, 24]
+generations = 40
+pop_size = 40
+workers = 12
+
+[[variant]]
+name = "double"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+
+
+[[variant]]
+name = "sparse"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.005
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+bias_init_stdev = 0.1
+[variant.adapt]
+nuke_after = 10
+
+
+[[variant]]
+name = "both"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.005
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+bias_init_stdev = 0.1
+[variant.adapt]
+nuke_after = 10
+

@@ -1,0 +1,41 @@
+# Is the algorithm broken, or is there a snag? Yoshi's Island 1 and 2 from their real starts, seeds 1-4, 50 genomes, 60 generations, the current setup
+# last_chance_frames = 32: in the last 32 frames of the stuck clock the env presses a fresh jump + RIGHT + run for the policy.
+# (physics inputs, opportunity bonus 1.0, nuke on). Run: scripts/yi12_seeds.sh   (log /tmp/yi12_seeds.log)
+name = "yi12-seeds"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3, 4]
+generations = 60
+pop_size = 50
+workers = 12
+
+[[variant]]
+name = "yi1"
+[variant.env]
+levels = ["YoshiIsland1"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "yi2"
+[variant.env]
+levels = ["YoshiIsland2"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

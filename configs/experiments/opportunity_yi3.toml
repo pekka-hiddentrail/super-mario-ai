@@ -1,0 +1,40 @@
+# Rewarding the climb on Yoshi's Island 3 (from scratch): a plain height bonus (1 point per pixel of a new highest standing position) against the opportunity bonus
+# (1 point per pixel climbed, only for a jump that had a higher platform in reach at takeoff and came down on something higher; each landing tile pays once).
+# Same setup, seeds and budget as the bias test, whose bias-30 variant is the baseline without any climb reward (all three seeds stopped at x ~545).
+# 30 genomes, 40 generations, 3 seeds, nuke on. Run: scripts/opportunity_yi3.sh   (log /tmp/opportunity_yi3.log)
+name = "opportunity-yi3"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24]
+generations = 40
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "height-1"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+[variant.reward]
+height_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "opportunity-1"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

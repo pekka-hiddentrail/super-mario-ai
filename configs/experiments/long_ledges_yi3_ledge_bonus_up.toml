@@ -1,0 +1,22 @@
+# Long re-run of ledges-yi3 ledge-bonus-up, seed 14: 50 genomes, 80 generations (the first run: 30 genomes, 40 generations).
+name = "long-ledges-yi3-ledge-bonus-up"
+base = "configs/yi1_adaptive.toml"
+seeds = [14]
+generations = 80
+pop_size = 50
+workers = 12
+
+[[variant]]
+name = "ledge-bonus-up"
+[variant.env]
+levels = ["states/manual_1793527866.state"]
+inputs = "ledges"
+[variant.reward]
+ledge_bonus = 40.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

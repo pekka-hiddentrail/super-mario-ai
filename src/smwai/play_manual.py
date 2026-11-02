@@ -11,6 +11,8 @@ import numpy as np
 import pygame
 import stable_retro as retro
 
+from . import ram as R
+
 GAME = "SuperMarioWorld-Snes-v0"
 KEYS = {
     pygame.K_UP: "UP", pygame.K_DOWN: "DOWN", pygame.K_LEFT: "LEFT", pygame.K_RIGHT: "RIGHT",
@@ -74,9 +76,10 @@ def main():
             screen = pygame.display.get_surface()
             screen.blit(frame, (0, 0))
             pygame.display.flip()
-        if time.time() - last_fps > 2:
-            pygame.display.set_caption(f"Super Mario World - {n / (time.time() - last_fps):.0f} fps")
-            n, last_fps = 0, time.time()
+        if time.time() - last_fps > 0.25:          # the title shows where Mario is (x, y in pixels), for placing saved states
+            st = R.read_state(R.wram(env.unwrapped.get_ram()))
+            pygame.display.set_caption(f"x {st.x}  y {st.y}  {'air' if st.in_air else 'ground'}  |  F5 saves, R restarts, Esc quits")
+            last_fps = time.time()
         clock.tick(60 * args.speed)
 
 

@@ -7,6 +7,7 @@ inputs = "collect"        # solid, enemy, item, coin grids + water, Yoshi, power
 frame_skip = 4
 radius = 6
 stuck_frames = 120
+last_chance_frames = 32  # in the last 32 frames of the stuck clock the env jumps + runs right for the policy
 max_frames = 20000
 
 [reward]

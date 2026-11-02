@@ -5,6 +5,7 @@ Action: MultiBinary over BUTTONS (each output of a NEAT network maps to one butt
 Reward: progress to the right (new max x) plus optional bonuses, all configurable.
 """
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
@@ -15,6 +16,7 @@ from . import ram as R
 
 GAME = "SuperMarioWorld-Snes-v0"
 BUTTONS = ["A", "B", "X", "Y", "UP", "DOWN", "LEFT", "RIGHT"]
+MIN_RISE = 12               # pixels higher than the takeoff spot that count as 'a higher platform' (opportunity_bonus)
 MESSAGE_MAX_FRAMES = 600   # safety limit for closing a message box (it takes about 20 frames)
 
 
@@ -34,6 +36,9 @@ class RewardConfig:
     goal_bar_bonus: float = 0.0    # per bonus star won at the goal bar: hitting the bar higher pays more
     water_penalty: float = 0.0     # per emulator frame spent in water (off: it is not clear yet that avoiding water is right)
     height_bonus: float = 0.0      # per pixel of new standing height: landing on something higher than ever before
+    ledge_bonus: float = 0.0       # flat, the first time Mario stands on each pass-through ledge (a run of ledge tiles is one, the rotating platform is one): like a coin
+    opportunity_bonus: float = 0.0  # per pixel climbed by a jump that took an opportunity: a platform higher up was within reach (jumpview.higher_landings) when Mario left
+                                    # the ground, and he lands on a higher spot (MIN_RISE+ pixels). Each landing tile pays once per episode.
     pipe_bonus: float = 0.0         # per pipe entered, down or sideways (each pipe pays once per episode)
 
 
@@ -58,6 +63,7 @@ class EnvConfig:
     room_progress: bool = False    # measure progress per room (pipes/doors): a bonus room starts its own 'furthest x'
     skip_messages: bool = True    # a message box freezes the game until A or B is pressed: close it by itself, not counted in the frame budget or the stuck rule
     stuck_frames: int = 120       # no new max x for this many frames -> truncate
+    last_chance_frames: int = 0   # >0: in the last N frames before that, with a wall right in front of Mario, the env presses a fresh jump (B) + RIGHT + run for the policy
     max_frames: int = 20000
     reward: RewardConfig = field(default_factory=RewardConfig)
 
@@ -106,6 +112,10 @@ def _base_layout(cfg):
         motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
         return ([("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid"), ("pipe", "grid"), ("platform", "grid")]
                 + scalars + motion + [(name, "scalar") for name in jumpview.names()])
+    if cfg.inputs == "ledges":      # physics + a ledge channel: the pass-through ledges and moving platforms are not walls (not in the solid grid), the jump options know it
+        motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
+        return ([("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid"), ("ledge", "grid")] + scalars
+                + motion + [(name, "scalar") for name in jumpview.names()])
     if cfg.inputs == "explore":     # physics + a pipe channel: pipes can be told apart from ground, and entering one can be rewarded
         motion = [("x_speed", "scalar"), ("y_speed", "scalar"), ("on_ground", "scalar")]
         return ([("solid", "grid"), ("enemy", "grid"), ("item", "grid"), ("coin", "grid"), ("pipe", "grid")] + scalars
@@ -172,25 +182,27 @@ def ride_motion(state, prev):
 
 
 def _base_observation(ram, state, cfg, memory=None):
-    if cfg.inputs in ("channels", "collect", "physics", "explore", "ride", "ride2"):
-        collect = cfg.inputs in ("collect", "physics", "explore", "ride", "ride2")
+    if cfg.inputs in ("channels", "collect", "physics", "explore", "ride", "ride2", "ledges"):
+        collect = cfg.inputs in ("collect", "physics", "explore", "ride", "ride2", "ledges")
         enemy, item = R.sprite_grids(state, view(cfg), legacy=not collect, skip_platforms=cfg.inputs in ("ride", "ride2"),
                                    skip_harmless=cfg.jump_fixes)
-        parts = [R.solid_grid(ram, state, view(cfg)).ravel(), enemy.ravel(), item.ravel()]
+        parts = [R.solid_grid(ram, state, view(cfg), skip_ledges=cfg.inputs == "ledges").ravel(), enemy.ravel(), item.ravel()]
         if collect:
             parts.append(R.coin_grid(ram, state, view(cfg)).ravel())
+        if cfg.inputs == "ledges":
+            parts.append(R.ledge_grid(ram, state, view(cfg), cfg.swing_model).ravel())
         if cfg.inputs in ("explore", "ride", "ride2"):
             parts.append(R.pipe_grid(ram, state, view(cfg)).ravel())
         if cfg.inputs in ("ride", "ride2"):
             parts.append(R.platform_grid(state, view(cfg), cfg.swing_model).ravel())
         parts.append(np.array([state.in_water, state.on_yoshi, min(state.powerup, 3)], dtype=np.int8))
-        if cfg.inputs in ("physics", "explore", "ride", "ride2"):
+        if cfg.inputs in ("physics", "explore", "ride", "ride2", "ledges"):
             parts.append(np.array(jumpview.motion_scalars(state), dtype=np.int8))
             if cfg.jump_fixes and state.in_air and memory is not None and "jump" in memory:
                 parts.append(memory["jump"])                    # in the air the jump is under way: keep what the takeoff predicted
             else:
                 jumps = jumpview.features(ram, state, ride=cfg.inputs in ("ride", "ride2"), ceilings=cfg.inputs == "ride2",
-                                          fixed=cfg.jump_fixes, predict=cfg.predict_platforms, swing=cfg.swing_model)
+                                          fixed=cfg.jump_fixes, predict=cfg.predict_platforms, swing=cfg.swing_model, ledges=cfg.inputs == "ledges")
                 if memory is not None:
                     memory["jump"] = jumps
                 parts.append(jumps)
@@ -208,7 +220,7 @@ class SmwEnv(gym.Env):
         self.observation_space = spaces.Box(-16, 16, (n_inputs(self.cfg),), dtype=np.int8)
         self.action_space = spaces.MultiBinary(len(BUTTONS))
         self._env = None
-        self._level = None
+        self._level, self._raw = None, None
         self._pad = None
         self.frame = None
         self.capture = None            # set to a list to collect every emulator frame (video)
@@ -219,6 +231,7 @@ class SmwEnv(gym.Env):
         self.death_map = None         # DeathMap.export(): set by the trainer (and by replays) when cfg.death_inputs is on
         self.best_ground_y = 0
         self._pipes = set()
+        self._chance, self._climbed, self._ledges = None, set(), set()
         self.room_max, self.room_sig, self._room_pending = {}, None, False
 
     def _open(self, level):
@@ -228,7 +241,9 @@ class SmwEnv(gym.Env):
             return
         if self._env is not None:
             self._env.close()
-        self._env = retro.make(GAME, state=level, use_restricted_actions=retro.Actions.ALL,
+        raw = str(level).endswith(".state")          # a state saved with F5 in play_manual: raw emulator memory, loaded after the reset
+        self._raw = Path(level).read_bytes() if raw else None
+        self._env = retro.make(GAME, state="YoshiIsland2" if raw else level, use_restricted_actions=retro.Actions.ALL,
                                render_mode=None)
         self._level = level
         names = list(self._env.buttons)
@@ -262,6 +277,8 @@ class SmwEnv(gym.Env):
         index = (options or {}).get("level_index", 0)
         self._open(self.cfg.levels[index])
         self.frame = self._env.reset()[0]
+        if self._raw:
+            self._env.unwrapped.em.set_state(self._raw)
         for _ in range(2):  # let the first frames settle so RAM is valid
             self.frame = self._env.step(np.zeros(12, dtype=np.int8))[0]
         self._memory = {}
@@ -271,9 +288,11 @@ class SmwEnv(gym.Env):
         self.max_x = self.state.x
         self.frames = 0
         self.stuck = 0
+        self._chance_on = False
         self.events = []
         self.best_ground_y = self.state.y        # highest standing position so far (smallest y)
         self._pipes = set()
+        self._chance, self._climbed, self._ledges = None, set(), set()   # the last takeoff with a higher platform in reach (feet y, landings), the landing tiles already paid for
         self.room_max, self.room_sig, self._room_pending = {}, None, False
         if self.capture is not None:
             self.capture.append(self.frame.copy())
@@ -283,9 +302,33 @@ class SmwEnv(gym.Env):
         return {"x": self.state.x, "y": self.state.y, "max_x": max([self.max_x, *self.room_max.values()]),
                 "powerup": self.state.powerup, "frames": self.frames}
 
+    def _wall_ahead(self):
+        """A hard (not pass-through) tile just past Mario's right edge, at his lower body: he is standing against a wall."""
+        ram = R.wram(self._env.unwrapped.get_ram())
+        px, feet = self.state.x + 20, self.state.y + 32
+        return any(R.solid_at(ram, px, feet - d) and not R.ledge_at(ram, px, feet - d) for d in (4, 20))
+
+    def _last_chance(self, action):
+        """last_chance_frames: when the stuck clock is within that many frames of running out and a wall stands right in front of Mario, the policy's buttons are
+        replaced by run + RIGHT + a jump: the first step releases B (so the press is a new one), the rest hold it. Once started it runs on (in the air the wall is
+        below him). Progress resets the clock and ends it; the clock itself is not extended."""
+        n = self.cfg.last_chance_frames
+        if n <= 0 or self.stuck < self.cfg.stuck_frames - n:
+            self._chance_on = False
+            return action
+        if not self._chance_on and not self._wall_ahead():
+            return action
+        action = np.array(action, dtype=bool)
+        action[BUTTONS.index("LEFT")] = False
+        action[BUTTONS.index("RIGHT")] = action[BUTTONS.index("Y")] = True
+        action[BUTTONS.index("B")] = self._chance_on
+        self._chance_on = True
+        return action
+
     def step(self, action):
         if self.cfg.cancel_opposites:
             action = cancel_opposites(action)
+        action = self._last_chance(action)
         pad = np.zeros(12, dtype=np.int8)
         for i, on in enumerate(action):
             if on:
@@ -303,6 +346,8 @@ class SmwEnv(gym.Env):
         self._track_room(prev)
         rc = self.cfg.reward
         reward = -rc.time_penalty * self.cfg.frame_skip
+        reward += self._opportunity(prev)
+        reward += self._ledge(prev)
         if self.state.in_water:
             reward -= rc.water_penalty * self.cfg.frame_skip
         if self.state.x > self.max_x:
@@ -394,6 +439,40 @@ class SmwEnv(gym.Env):
                 self._takeoff["hold"] += 1
             else:
                 self._takeoff["open"] = False
+
+    def _ledge(self, prev):
+        """ledge_bonus: a flat payment the first time Mario stands on each ledge (R.ledge_key); it counts as progress for the stuck rule."""
+        rc, st = self.cfg.reward, self.state
+        if rc.ledge_bonus <= 0 or st.in_air:
+            return 0.0
+        key = R.ledge_key(R.wram(self._env.unwrapped.get_ram()), st, self.cfg.swing_model)
+        if key is None or key in self._ledges:
+            return 0.0
+        self._ledges.add(key)
+        self.events.append([self.frames, "climb", st.x, st.y])
+        self.stuck = 0
+        return rc.ledge_bonus
+
+    def _opportunity(self, prev):
+        """opportunity_bonus: at takeoff, note whether any jump from here would land on something higher up; on landing, pay per pixel climbed
+        when Mario really came down at least MIN_RISE pixels higher (a landing tile pays once). Climbing by luck, with nothing in reach, pays nothing."""
+        rc, st = self.cfg.reward, self.state
+        if rc.opportunity_bonus <= 0:
+            return 0.0
+        if st.in_air and not prev.in_air:
+            hits = jumpview.higher_landings(R.wram(self._env.unwrapped.get_ram()), prev, MIN_RISE)
+            self._chance = (prev.y + jumpview.FEET, hits) if hits else None
+        elif prev.in_air and not st.in_air and self._chance is not None:
+            feet0, _ = self._chance
+            self._chance = None
+            rise = feet0 - (st.y + jumpview.FEET)
+            key = ((st.x + 8) // 16, (st.y + jumpview.FEET) // 16)
+            if rise >= MIN_RISE and key not in self._climbed and st.rooms == prev.rooms:
+                self._climbed.add(key)
+                self.events.append([self.frames, "climb", st.x, st.y])
+                self.stuck = 0
+                return rc.opportunity_bonus * rise
+        return 0.0
 
     def _track_room(self, prev):
         """With room_progress on, every room (main level, bonus room) keeps its own furthest x."""

@@ -99,7 +99,7 @@ def param_inputs(raw, prefix):
             raw["neat"]["pop_size"] = st.number_input("Population", 10, 2000, int(raw["neat"]["pop_size"]),
                                                       key=prefix + "pop")
         if True:
-            modes = ["mixed", "channels", "collect", "physics", "explore", "ride", "ride2"]
+            modes = ["mixed", "channels", "collect", "physics", "explore", "ride", "ride2", "ledges"]
             raw["env"]["inputs"] = st.selectbox("Network inputs", modes, key=prefix + "inputs",
                                                 index=modes.index(raw["env"].get("inputs", "mixed")),
                                                 help="mixed: one tile grid. channels: solid / enemy / item grids plus water, "
@@ -164,6 +164,8 @@ def param_inputs(raw, prefix):
                            ("yoshi_coin_bonus", "Big (Yoshi) coin bonus"), ("block_bonus", "Box hit bonus"),
                            ("goal_bar_bonus", "Goal bar bonus (per star: higher hit = more)"),
                            ("height_bonus", "Climb bonus (per pixel higher than ever before)"),
+                           ("ledge_bonus", "Ledge bonus (the first time on each pass-through ledge)"),
+                           ("opportunity_bonus", "Opportunity bonus (per pixel climbed by a jump to a platform that was in reach)"),
                            ("pipe_bonus", "Pipe bonus (entering a pipe, once per pipe)"),
                            ("water_penalty", "Water penalty (per frame in water)"),
                            ("speed_bonus", "Speed bonus (per px/frame running)"),

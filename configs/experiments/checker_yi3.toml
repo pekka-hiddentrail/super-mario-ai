@@ -1,0 +1,41 @@
+# The checkered platforms of Yoshi's Island 3 (x ~1100-1500), from the saved state riding the first one (states/manual_1793530058.state, gitignored): are they better as
+# ground (sprite_platforms on: platform grid, jump arcs that land on them, riding is not stuck) than as enemies (off)? 3 seeds, 30 genomes, 30 generations, opportunity bonus 2.0, nuke on.
+# Run: scripts/checker_yi3.sh   (log /tmp/checker_yi3.log)
+name = "checker-yi3"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24]
+generations = 30
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "platforms-off"
+[variant.env]
+levels = ["states/manual_1793530058.state"]
+inputs = "physics"
+sprite_platforms = false
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "platforms-on"
+[variant.env]
+levels = ["states/manual_1793530058.state"]
+inputs = "physics"
+sprite_platforms = true
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

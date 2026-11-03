@@ -1,0 +1,56 @@
+# The tall wall of Yoshi's Island 3 (x ~2770), from the saved state on the block row (states/manual_1793530116.state, gitignored): the seeds that got here spin-jumped and broke the
+# turn block they needed. 'plain' = as it is; 'kinds' = block_kinds (the turn block is its own tile, 2, in the solid grid); 'nospin' = the A button is never pressed.
+# 3 seeds, 30 genomes, 30 generations, opportunity bonus 2.0, nuke on. Run: scripts/wall_yi3.sh   (log /tmp/wall_yi3.log)
+name = "wall-yi3"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24]
+generations = 30
+pop_size = 30
+workers = 12
+
+[[variant]]
+name = "plain"
+[variant.env]
+levels = ["states/manual_1793530116.state"]
+inputs = "physics"
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "kinds"
+[variant.env]
+levels = ["states/manual_1793530116.state"]
+inputs = "physics"
+block_kinds = true
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "nospin"
+[variant.env]
+levels = ["states/manual_1793530116.state"]
+inputs = "physics"
+no_spin = true
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

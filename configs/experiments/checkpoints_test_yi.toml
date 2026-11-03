@@ -1,0 +1,26 @@
+# Test of the checkpoint logic on Yoshi's Island 3 from the real start: when a run stands on the ground within 20 px of one of the x below with y < 200, the game is saved
+# (checkpoints/checkpoint_NN_xCX.state in the run folder) and the next generations start there. Seeds 11 and 12 (the ones that got past the early wall), 40 genomes, 25 generations.
+# Run: scripts/checkpoints_test.sh   (log /tmp/checkpoints_test.log)
+name = "checkpoints-test"
+base = "configs/yi1_adaptive.toml"
+seeds = [11, 12]
+generations = 25
+pop_size = 40
+workers = 12
+
+[[variant]]
+name = "double"
+[variant.env]
+checkpoints = [300, 576, 915, 1207, 1640, 2184, 2800, 3012, 3814, 4250]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

@@ -1,0 +1,24 @@
+# The same, 150 generations (yi3_new_yi.toml ran 60: best x 525, 796, 1063). Yoshi's Island 3 from its real start with the new base config (checkered platforms as ground, room_progress, last chance, doubled opportunity bonus): 3 seeds x 40 genomes x 150 generations,
+# physics inputs, nuke on. Compare with yi3-150 (same bonus, platforms as enemies: best x 514-1544 after 150 generations). Run: scripts/yi3_new150.sh   (log /tmp/yi3_new150.log)
+name = "yi3-new150"
+base = "configs/yi1_adaptive.toml"
+seeds = [4, 14, 24]
+generations = 150
+pop_size = 40
+workers = 12
+
+[[variant]]
+name = "double"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

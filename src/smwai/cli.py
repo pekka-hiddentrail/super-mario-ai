@@ -45,6 +45,21 @@ def main(argv=None):
     st.add_argument("--run", required=True, help="run folder name")
     st.add_argument("--gap", type=float, default=1.0, help="seconds of the last frame held after each video")
 
+    mp = sub.add_parser("map-play", help="Mario plays the whole game: the start level, then the map (random direction, 1-3 steps, A) and the levels it leads to, in one video")
+    mp.add_argument("--seed", type=int, default=1)
+    mp.add_argument("--visits", type=int, default=6, help="how many times he chooses on the map")
+    mp.add_argument("--levels", default="configs/map_levels.toml", help="which finished run plays which level")
+    mp.add_argument("--runs-dir", default="runs")
+    mp.add_argument("--learn", action="store_true", help="one population learns in every level (from the save made when the level began) instead of finished genomes playing")
+    mp.add_argument("--generations", type=int, default=40, help="with --learn: generations per round of learning")
+    mp.add_argument("--pop", type=int, default=40, help="with --learn: genomes")
+    mp.add_argument("--rounds", type=int, default=3, help="with --learn: rounds of learning for a level before it counts as not cleared")
+
+    ch = sub.add_parser("chain", help="replay a chain of checkpoint runs from the real start of the level and check that it clears it")
+    ch.add_argument("run_dir")
+    ch.add_argument("--video", action="store_true", help="also render the whole chain as one video (videos/chain_gen_NNNN.mp4)")
+    ch.add_argument("--generation", type=int, help="the generation whose best run ends the chain (default: the highest score)")
+
     r = sub.add_parser("replay", help="re-run a recorded generation headless and check it")
     r.add_argument("run_dir")
     r.add_argument("generation", type=int)
@@ -99,6 +114,22 @@ def main(argv=None):
         from .curriculum import run_curriculum
         run_curriculum(args.spec, args.runs_dir, args.stamp)
         return
+    if args.cmd == "map-play":
+        from . import mapplay
+        mapplay.run_map(args.seed, args.visits, args.levels, args.runs_dir, learn=args.learn, generations=args.generations, pop=args.pop, rounds=args.rounds)
+        return
+    if args.cmd == "chain":
+        from . import chain
+        gen = args.generation
+        if gen is None:
+            from . import video
+            gen = video.best_generation(Path(args.run_dir))["generation"]       # the highest score: with checkpoints it counts what the chain had collected before the start
+        result = chain.verify(args.run_dir, gen)
+        print(json.dumps(result))
+        print("CHAIN CLEARS THE LEVEL" if result["cleared"] else "the chain does not clear the level")
+        if args.video:
+            print("video:", chain.render(args.run_dir, gen))
+        return
     if args.cmd == "video":
         from . import video
         runs = [Path(args.runs_dir) / args.run] if args.run else sorted(
@@ -130,7 +161,7 @@ def main(argv=None):
         run = Path(args.run_dir)
         train._ENV_CFG = config.load(run / "config.toml").env
         rec = json.loads((run / "best" / f"gen_{args.generation:04d}.json").read_text())
-        reward, info = train.replay_actions(rec["actions"])
+        reward, info = train.replay_actions(rec["actions"], rec.get("start"))
         print(f"recorded fitness {rec['fitness']:.1f}, replayed {reward:.1f}, max_x {info['max_x']}")
 
 

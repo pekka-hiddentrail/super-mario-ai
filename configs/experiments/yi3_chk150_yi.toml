@@ -1,0 +1,28 @@
+# Yoshi's Island 3 from the real start with the checkpoint rule (every 300 px, a checkpoint is given up after 10 generations without progress): seeds 12, 14 and 24,
+# 40 genomes, 150 generations, a run stops at its first clear, then `smwai.cli chain` replays each run from the real start and renders it as one video.
+# Run: scripts/yi3_chk150.sh   (log /tmp/yi3_chk150.log)
+name = "yi3-chk150"
+base = "configs/yi1_adaptive.toml"
+seeds = [12, 14, 24]
+generations = 150
+pop_size = 40
+workers = 12
+stop_on_clear = true
+
+[[variant]]
+name = "every300"
+[variant.env]
+checkpoint_every = 300
+checkpoint_patience = 10
+levels = ["YoshiIsland3"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

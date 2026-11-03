@@ -1,0 +1,28 @@
+# The generic checkpoint rule on Yoshi's Island 3 from the real start: every 300 px of x, the first standing position after Mario crosses n * 300 (any y) is saved, and the next
+# generations start there. Seed 12 (the one that cleared the list-based test), 40 genomes, up to 60 generations, stops at the first clear; then `smwai.cli chain` replays the chain
+# from the real start. checkpoint_patience = 10: a checkpoint that gives no new furthest x in 10 generations is given up for the one before it. Run: scripts/checkpoints_every.sh   (log /tmp/checkpoints_every.log)
+name = "checkpoints-every"
+base = "configs/yi1_adaptive.toml"
+seeds = [12]
+generations = 60
+pop_size = 40
+workers = 12
+stop_on_clear = true
+
+[[variant]]
+name = "every300"
+[variant.env]
+checkpoint_every = 300
+checkpoint_patience = 10
+levels = ["YoshiIsland3"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

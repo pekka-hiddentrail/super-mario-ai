@@ -1,4 +1,4 @@
-# Plan: overworld map navigation (not started)
+# Plan: overworld map navigation (first version built: `smwai.cli map-play`)
 
 Goal: Mario goes from level to level through the game's overworld map like a real playthrough, and eventually a **map navigation network** chooses where to go
 (which level to enter, which route to take) on its own. Nothing here is built yet; this is the order of work.
@@ -43,3 +43,13 @@ population from one level to the next in a fresh process. The map is never visit
 ## Constraints that carry over from the current work
 - One change at a time, at least 3 seeds, short runs on Yoshi's Island 1 first, commit and merge only when asked.
 - Old configs must keep replaying: every new behaviour sits behind an option that is off by default.
+
+## Built (first version) and what was measured
+- `smwai.overworld.Game`: the whole game on one emulator. Game mode `$0100`: 0x0E map, 0x14 in a level, 0x0F-0x13 loading a level; Mario's map position is `$1F17`/`$1F19` (16-bit)
+  with the submap in `$13C3`; A on a level tile enters it and `$13BF` then holds its translevel number (all 24 shipped levels are in `overworld.LEVELS`). `$0DC7`/`$0DC9` are NOT zero while
+  standing still, so "moving" is judged from the position alone. After the goal the game needs about 700 frames to reach the map and then walks Mario along a newly opened path by itself.
+- The game's Start state is the first level (Yoshi's Island 2), not the title screen; there is no shipped overworld state, so the map is reached by clearing that level.
+- `SmwEnv.attach(retro_env, frame)`: the level observation and rewards on an emulator someone else runs, so a trained genome plays a level entered from the map.
+- `smwai.mapplay.run_map` / `smwai.cli map-play --seed S --visits N`: play the start level, then N times: a random direction, 1-3 steps, A. Levels with a trained genome (`configs/map_levels.toml`)
+  are played by it, others by random buttons. The run ends when the visits are used, lives run out or Mario is stuck in a level he cannot leave. One video: `runs/<stamp>-map-<mode>-sS-vN/videos/map_run.mp4`.
+- Not built yet: levels trained inside the map loop (checkpoints and the chain are a training device; here only finished genomes play), a map policy that looks at the map, secret exits, saving.

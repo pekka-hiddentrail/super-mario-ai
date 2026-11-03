@@ -201,8 +201,9 @@ def _play_network(run_dir, generation, env):
     graph["layer"].update({str(k): 1 for k in graph["hidden"] if str(k) not in graph["layer"]})
     graph["bias"].update({str(k): round(genome.nodes[k].bias, 3) for k in graph["hidden"]})
     watch = graph["hidden"] + graph["outputs"]
-    env.death_map = json.loads((run_dir / "best" / f"gen_{generation:04d}.json").read_text()).get("death_map")
-    obs, info = env.reset()
+    rec = json.loads((run_dir / "best" / f"gen_{generation:04d}.json").read_text())
+    env.death_map = rec.get("death_map")
+    obs, info = env.reset(options={"start": rec.get("start") or ""})          # the checkpoint save that generation started from
     steps, total = [], 0.0
     while True:
         out = net.activate(obs.ravel().astype(np.float64))
@@ -220,7 +221,7 @@ def _play_network(run_dir, generation, env):
 
 def _play_masks(rec, env):
     """Replay recorded button presses (PPO runs have no network to draw)."""
-    env.reset()
+    env.reset(options={"start": rec.get("start") or ""})
     steps, total, info = [], 0.0, {}
     for mask in rec["actions"]:
         before = len(env.capture)

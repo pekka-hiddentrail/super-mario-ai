@@ -7,6 +7,8 @@ inputs = "collect"        # solid, enemy, item, coin grids + water, Yoshi, power
 frame_skip = 4
 radius = 6
 stuck_frames = 120
+sprite_platforms = true  # checkerboard and floating platforms are ground (own grid, jump arcs land on them, riding one is not stuck)
+room_progress = true     # every room (pipe, bonus room) keeps its own furthest x: progress underground pays like above ground and is not stuck
 last_chance_frames = 32  # in the last 32 frames of the stuck clock the env jumps + runs right for the policy
 max_frames = 20000
 

@@ -54,19 +54,24 @@ def run_episode(genome, config, record=False):
             actions.append(_to_mask(action))
         obs, reward, term, trunc, info = env.step(action)
         total += reward
+        while env.new_cands:                                     # a checkpoint candidate was saved: keep the genome that got there beside it (the map run plays every stretch with its network)
+            with open(env.new_cands.pop().with_suffix(".pkl"), "wb") as f:
+                pickle.dump(genome, f)
         cells.add(novelty.cell_id(info["x"], info["y"]))
         if record:
             path.append([info["x"], info["y"]])
         if term or trunc:
             info["path"] = path
             info["cells"] = cells
-            return total, actions, info
+            if env.cfg.checkpoint_dir:
+                info["trace"] = list(env._trace)        # every emulator input of the run: chain.py replays a chain of checkpoint runs from them
+            return total + env.base, actions, info      # + what the chain had collected up to this start (0 without checkpoints): scores stay comparable across checkpoints
 
 
-def replay_actions(masks):
+def replay_actions(masks, start=""):
     """Re-run a recorded action list headless; returns (reward, info) with info["path"]."""
     env = _get_env()
-    _, info = env.reset()
+    _, info = env.reset(options={"start": start or ""})          # the checkpoint save the run started from ("" = the level's own start)
     total, path = 0.0, [[info["x"], info["y"]]]
     for mask in masks:
         _, reward, term, trunc, info = env.step(_from_mask(mask))
@@ -75,7 +80,67 @@ def replay_actions(masks):
         if term or trunc:
             break
     info["path"] = path
-    return total, info
+    return total + env.base, info
+
+
+def promote_checkpoint(cfg):
+    """After a generation: of the checkpoint candidates its runs saved, the one reached in the fewest frames at each checkpoint becomes checkpoint_NN_xCX.state
+    in the run's checkpoints folder (the ones in between that nobody stood on are skipped), and current.txt points at the furthest, so the next generation starts there.
+    Returns (NN, x, frames) of the furthest, or None."""
+    if not (cfg.checkpoints or cfg.checkpoint_every) or not cfg.checkpoint_dir:
+        return None
+    root = Path(cfg.checkpoint_dir)
+    cands = sorted((root / "cand").glob("cand_*.state"))
+    if not cands:
+        return None
+
+    def key(p):
+        parts = p.stem.split("_")                                   # cand, NN, xCX, fFRAMES, pid, n
+        return int(parts[1]), -int(parts[3][1:])
+
+    fastest = {}
+    for p in cands:
+        fastest[key(p)[0]] = max(fastest.get(key(p)[0], p), p, key=key)
+    for number, p in fastest.items():
+        parts = p.stem.split("_")
+        shutil.copy(p, root / f"checkpoint_{number:02d}_{parts[2]}.state")
+        shutil.copy(p.with_suffix(".json"), root / f"checkpoint_{number:02d}_{parts[2]}.json")      # where it started from and the input that got it here (chain.py)
+        if p.with_suffix(".pkl").exists():
+            shutil.copy(p.with_suffix(".pkl"), root / f"checkpoint_{number:02d}_{parts[2]}.pkl")    # the genome that played that run
+        (root / f"checkpoint_{number:02d}_{parts[2]}.bad").unlink(missing_ok=True)                  # a new save of a given-up checkpoint is a fresh chance
+    best = fastest[max(fastest)]
+    parts = best.stem.split("_")
+    number, cx, frames = int(parts[1]), int(parts[2][1:]), int(parts[3][1:])
+    target = root / f"checkpoint_{number:02d}_x{cx}.state"
+    for p in cands:
+        p.unlink()
+        p.with_suffix(".json").unlink(missing_ok=True)
+        p.with_suffix(".pkl").unlink(missing_ok=True)
+    tmp = root / "current.tmp"
+    tmp.write_text(str(target.resolve()))
+    tmp.replace(root / "current.txt")
+    return number, cx, frames
+
+
+def revert_checkpoint(cfg):
+    """The current checkpoint led nowhere: mark its save bad and make the best earlier one that is not bad the start (none left: the level's own start).
+    Returns (the given-up checkpoint number, the number now in use or 0) or None when no checkpoint is in use."""
+    root = Path(cfg.checkpoint_dir)
+    pointer = root / "current.txt"
+    if not pointer.exists():
+        return None
+    current = Path(pointer.read_text().strip())
+    number = int(current.name.split("_")[1])
+    current.with_suffix(".bad").write_text("gave no progress")
+    earlier = sorted((p for p in root.glob("checkpoint_*.state") if int(p.name.split("_")[1]) < number and not p.with_suffix(".bad").exists()),
+                     key=lambda p: int(p.name.split("_")[1]))
+    if earlier:
+        tmp = root / "current.tmp"
+        tmp.write_text(str(earlier[-1].resolve()))
+        tmp.replace(pointer)
+        return number, int(earlier[-1].name.split("_")[1])
+    pointer.unlink()
+    return number, 0
 
 
 def eval_genome(genome, config):
@@ -160,6 +225,7 @@ class RunReporter(neat.reporting.BaseReporter):
         self.generation = -1
         self.gen_start = time.time()
         self.best_ever = -np.inf
+        self.cp_best, self.cp_stall = -np.inf, 0       # the furthest x since the current checkpoint began, and the generations since it last grew
         self.cleared = False                      # did this generation's best run clear the level (read by StopOnClear)
         self.csv = self.dir / "metrics.csv"
         if not self.csv.exists():
@@ -219,13 +285,33 @@ class RunReporter(neat.reporting.BaseReporter):
         stem.with_suffix(".json").write_text(json.dumps({
             "generation": self.generation, "genome": best.key, "fitness": best.fitness, "max_x": info["max_x"],
             "cleared": info["cleared"], "buttons": BUTTONS, "actions": actions,
-            "path": info["path"], "events": info.get("events", []),
+            "path": info["path"], "events": info.get("events", []), "start": info.get("start"), "trace": info.get("trace"),
             "death_map": self.stats.get("death_map")}))
         if best.fitness > self.best_ever:
             self.best_ever = best.fitness
             with open(self.dir / "best_ever.pkl", "wb") as f:
                 pickle.dump(best, f)
         secs = time.time() - self.gen_start
+        saved = promote_checkpoint(_ENV_CFG)
+        if saved:                                       # a new start: fitness counts from there, so the old bests and stalls mean nothing any more
+            self.best_ever, self.adapt_best, self.stall = -np.inf, -np.inf, 0
+            with open(self.dir / "events.jsonl", "a") as f:
+                f.write(json.dumps({"generation": self.generation, "checkpoint": saved[0], "x": saved[1], "frames": saved[2]}) + "\n")
+            print(f"gen {self.generation}: checkpoint {saved[0]} (x {saved[1]}) saved; the next generation starts there", flush=True)
+        if _ENV_CFG.checkpoint_patience > 0 and _ENV_CFG.checkpoint_dir:
+            if saved or info["max_x"] > self.cp_best:
+                self.cp_best, self.cp_stall = max(info["max_x"], self.cp_best) if not saved else info["max_x"], 0
+            else:
+                self.cp_stall += 1
+            if self.cp_stall >= _ENV_CFG.checkpoint_patience:
+                gone = revert_checkpoint(_ENV_CFG)
+                self.cp_best, self.cp_stall = -np.inf, 0
+                if gone:
+                    self.best_ever, self.adapt_best, self.stall = -np.inf, -np.inf, 0
+                    with open(self.dir / "events.jsonl", "a") as f:
+                        f.write(json.dumps({"generation": self.generation, "checkpoint_given_up": gone[0], "back_to": gone[1]}) + "\n")
+                    print(f"gen {self.generation}: checkpoint {gone[0]} gave no progress in {_ENV_CFG.checkpoint_patience} generations; back to "
+                          f"{'checkpoint ' + str(gone[1]) if gone[1] else 'the level start'}", flush=True)
         n_species = len(species.species)
         frames = self.stats.get("frames", 0)
         self.total_frames += frames
@@ -399,6 +485,9 @@ def train(cfg, config_path, resume=None, run_dir=None, generations=None, workers
         total = int(cfg.neat.get("start_links") or 0) or round(cfg.neat["start_fraction"] * possible_links(gcfg, int(cfg.neat.get("num_hidden", 0))))
         for genome in pop.population.values():
             add_start_links(genome, gcfg, total, random)
+    if cfg.env.checkpoints or cfg.env.checkpoint_every:
+        cfg.env.checkpoint_dir = str(run_dir / "checkpoints")           # before the pool forks: the workers read it from the config
+        (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
     n_workers = cfg.workers if workers is None else workers
     # the pool must fork before this process creates its own emulator
     stats = {"frames": 0}

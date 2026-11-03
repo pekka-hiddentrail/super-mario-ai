@@ -1,0 +1,5 @@
+# Which finished run plays which level when Mario plays the whole game (smwai.cli map-play): the first generation of the run whose best run cleared the level.
+# A level that is not here is played with random buttons.
+[levels]
+YoshiIsland2 = "runs/20261102-0233-yi12-seeds-yi2-s1"
+YoshiIsland1 = "runs/20261102-0233-yi12-seeds-yi1-s4"

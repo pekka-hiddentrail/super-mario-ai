@@ -126,9 +126,10 @@ def run_experiment(spec_path, runs_dir="runs", summary_only=False, stamp=None):
         log = out_dir / f"{run['variant']}-s{run['seed']}.log"
         print(f"[{i}/{len(runs)}] training {run['run_dir'].name} ...", flush=True)
         # a fresh process per run: one emulator per process, and no state leaks between variants
-        subprocess.run([sys.executable, "-W", "ignore", "-m", "smwai.cli", "train", "--config",
-                        str(run["config_path"]), "--run-dir", str(run["run_dir"])],
-                       stdout=log.open("w"), stderr=subprocess.STDOUT, check=False)
+        cmd = [sys.executable, "-W", "ignore", "-m", "smwai.cli", "train", "--config", str(run["config_path"]), "--run-dir", str(run["run_dir"])]
+        if spec.get("stop_on_clear"):
+            cmd.append("--stop-on-clear")                  # the run ends with the first generation whose best run clears the level
+        subprocess.run(cmd, stdout=log.open("w"), stderr=subprocess.STDOUT, check=False)
         s = summarize_run(run["run_dir"])
         print(f"      gens {s['gens']}  best x {s['best_x']}  cleared {s['cleared']}  "
               f"elapsed {time.time() - t0:.0f}s", flush=True)

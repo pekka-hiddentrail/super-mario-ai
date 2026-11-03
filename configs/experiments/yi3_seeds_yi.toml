@@ -1,0 +1,25 @@
+# Yoshi's Island 3 from its real start with the current base config (checkered platforms as ground, underground progress, wall-only last chance) and the doubled opportunity bonus:
+# seeds 1-3 and 5-14, 40 genomes, 40 generations, nuke on; a run stops at its first clear. Run: scripts/yi3_seeds.sh   (log /tmp/yi3_seeds.log)
+name = "yi3-seeds"
+base = "configs/yi1_adaptive.toml"
+seeds = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+generations = 40
+pop_size = 40
+workers = 12
+stop_on_clear = true
+
+[[variant]]
+name = "double"
+[variant.env]
+levels = ["YoshiIsland3"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 2.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

@@ -41,3 +41,16 @@ def test_no_wall_no_jump_until_one_is_there():
     assert pressed(e._last_chance(idle)) == {"RIGHT", "Y"} and e._chance_on
     e._wall_ahead = lambda: False                                       # in the air the wall is below him: it runs on
     assert pressed(e._last_chance(idle)) == {"B", "RIGHT", "Y"}
+
+
+def test_no_spin_drops_the_a_button():
+    e = SmwEnv.__new__(SmwEnv)
+    e.cfg = EnvConfig(no_spin=True)
+    seen = []
+    e._last_chance = lambda a: (seen.append(a), (_ for _ in ()).throw(StopIteration))[0]
+    held = np.ones(len(BUTTONS), dtype=bool)
+    try:
+        e.step(held)
+    except StopIteration:
+        pass
+    assert not seen[0][BUTTONS.index("A")] and seen[0][BUTTONS.index("B")]

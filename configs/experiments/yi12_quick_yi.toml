@@ -1,0 +1,41 @@
+# Quick check of Yoshi's Island 1 and 2 from their real starts with the current base config: seeds 14 and 24, 40 genomes, up to 40 generations; a run stops at its first clear (stop_on_clear).
+# Run: scripts/yi12_quick.sh   (log /tmp/yi12_quick.log)
+name = "yi12-quick"
+base = "configs/yi1_adaptive.toml"
+seeds = [14, 24]
+generations = 40
+pop_size = 40
+workers = 12
+stop_on_clear = true
+
+[[variant]]
+name = "yi1"
+[variant.env]
+levels = ["YoshiIsland1"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "yi2"
+[variant.env]
+levels = ["YoshiIsland2"]
+inputs = "physics"
+last_chance_frames = 32
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

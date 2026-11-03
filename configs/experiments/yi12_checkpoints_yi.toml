@@ -1,0 +1,43 @@
+# The checkpoint rule (every 300 px, give a checkpoint up after 10 generations without progress) on Yoshi's Island 1 and 2 from their real starts: seed 14, 40 genomes, up to 40 generations,
+# a run stops at its first clear, then `smwai.cli chain` replays each run from the real start. Run: scripts/yi12_checkpoints.sh   (log /tmp/yi12_checkpoints.log)
+name = "yi12-chk"
+base = "configs/yi1_adaptive.toml"
+seeds = [14]
+generations = 40
+pop_size = 40
+workers = 12
+stop_on_clear = true
+
+[[variant]]
+name = "yi1"
+[variant.env]
+levels = ["YoshiIsland1"]
+inputs = "physics"
+checkpoint_every = 300
+checkpoint_patience = 10
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10
+
+[[variant]]
+name = "yi2"
+[variant.env]
+levels = ["YoshiIsland2"]
+inputs = "physics"
+checkpoint_every = 300
+checkpoint_patience = 10
+[variant.reward]
+opportunity_bonus = 1.0
+[variant.neat]
+num_hidden = 8
+start_fraction = 0.025
+conn_delete_prob = 0.5
+compatibility_threshold = 4.5
+[variant.adapt]
+nuke_after = 10

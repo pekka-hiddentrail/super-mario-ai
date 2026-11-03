@@ -4,6 +4,9 @@ Observation: (2r+1, 2r+1) int8 grid around Mario (1 solid, -1 enemy, 2 power-up)
 Action: MultiBinary over BUTTONS (each output of a NEAT network maps to one button).
 Reward: progress to the right (new max x) plus optional bonuses, all configurable.
 """
+import json
+import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -55,6 +58,13 @@ class EnvConfig:
     reach_map: bool = False        # + a grid of the cells some jump would land on (jumpview.reach_grid): where Mario can get to from here
     sprite_platforms: bool = False  # the checkerboard and floating platforms (ram.PLATFORM_EXTENT) are ground, not enemies: a platform grid, jump arcs that land on them, riding one is not 'stuck'
     block_kinds: bool = False      # the solid grid tells the turn block (the yellow one with the eyes, 2) from other solid tiles (1)
+    checkpoints: list = field(default_factory=list)   # x coordinates: the first run to stand on the ground there (within checkpoint_tol, y < checkpoint_max_y) saves the game; later generations start from that save
+    checkpoint_every: int = 0     # >0: a checkpoint every this many pixels of x, for every level: the first standing position after Mario crosses n * checkpoint_every (any y); no list needed
+    checkpoint_patience: int = 0  # >0: this many generations in a row without a new furthest x from the current checkpoint and it is given up: the start goes back to the checkpoint before it
+    checkpoint_tol: int = 20
+    checkpoint_max_y: int = 200
+    checkpoint_dir: str = ""      # set by train() to <run>/checkpoints: candidates in cand/, the chosen saves checkpoint_NN_xCX.state, current.txt names the start in use
+    no_spin: bool = False          # the A button (spin jump) is never pressed: a spin jump from above breaks turn blocks Mario may need as a platform
     big_coins: bool = False        # the big (Yoshi) coin shows in the coin grid (as 2; only the ordinary coin did)
     ride_motion: bool = False      # + two inputs: how Mario moves while standing, beyond his own speed (a moving platform carries him; no sprite model needed)
     takeoff_inputs: bool = False   # + four inputs from where the best runs took off for their fatal fall, and how (deathmap.py)
@@ -248,6 +258,10 @@ class SmwEnv(gym.Env):
         self._pipes = set()
         self._chance, self._climbed, self._ledges = None, set(), set()
         self.room_max, self.room_sig, self._room_pending = {}, None, False
+        self.start_path, self._cp_next, self._cp_n = None, 0, 0
+        self.base, self._total = 0.0, 0.0        # the reward the chain had collected when this episode's start was saved, and what this episode has collected since
+        self.new_cands = []           # stems of the checkpoint candidates saved since the trainer last looked: it stores the genome that made each next to its save
+        self._trace = []              # with checkpoints: the emulator input of every frame since the reset (a 12-bit mask), to replay a chain of checkpoint runs from the real start
 
     def _open(self, level):
         import stable_retro as retro  # Linux/WSL only; imported lazily so config/tests work anywhere
@@ -285,19 +299,44 @@ class SmwEnv(gym.Env):
         for i in range(MESSAGE_MAX_FRAMES):
             if R.u8(R.wram(self._env.unwrapped.get_ram()), R.MESSAGE) == 0:
                 return
-            self.frame = self._env.step(press if i % 2 == 0 else release)[0]
+            self.frame = self._emu(press if i % 2 == 0 else release)
             if self.capture is not None:
                 self.capture.append(self.frame.copy())
+
+    def _emu(self, pad):
+        """One emulator frame; with checkpoints on, its input goes into the trace."""
+        if self.cfg.checkpoint_dir:
+            self._trace.append(int(sum(1 << i for i, v in enumerate(pad) if v)))
+        return self._env.step(pad)[0]
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         index = (options or {}).get("level_index", 0)
-        self._open(self.cfg.levels[index])
+        start = (options["start"] or None) if options and "start" in options else self._checkpoint_start()    # an explicit start ("" = the level's own) wins over the current checkpoint
+        self.start_path = start
+        m = re.search(r"checkpoint_(\d+)_x", Path(start).name) if start else None
+        self._cp_next = int(m.group(1)) if m else 0                      # checkpoint_NN: the NN checkpoints before it are behind Mario
+        self.base = self._start_score(start)
+        self._total = 0.0
+        self._open(start or self.cfg.levels[index])
         self.frame = self._env.reset()[0]
         if self._raw:
             self._env.unwrapped.em.set_state(self._raw)
+        self._trace = []
         for _ in range(2):  # let the first frames settle so RAM is valid
-            self.frame = self._env.step(np.zeros(12, dtype=np.int8))[0]
+            self.frame = self._emu(np.zeros(12, dtype=np.int8))
+        return self._begin()
+
+    def attach(self, retro_env, frame):
+        """Play on an emulator someone else runs (the whole game: a level entered from the map). No state is loaded: the episode begins where the game is."""
+        self._env, self._level, self._raw = retro_env, "attached", None
+        names = list(retro_env.buttons)
+        self._pad = [names.index(b) for b in BUTTONS]
+        self.start_path, self._cp_next, self.base, self._total, self._trace = None, 0, 0.0, 0.0, []
+        self.frame = frame
+        return self._begin()
+
+    def _begin(self):
         self._memory = {}
         self._takeoff = None
         self.node_flips = 0
@@ -316,8 +355,60 @@ class SmwEnv(gym.Env):
         return grid, self._info()
 
     def _info(self):
-        return {"x": self.state.x, "y": self.state.y, "max_x": max([self.max_x, *self.room_max.values()]),
+        info = {"x": self.state.x, "y": self.state.y, "max_x": max([self.max_x, *self.room_max.values()]),
                 "powerup": self.state.powerup, "frames": self.frames}
+        if self.start_path:
+            info["start"] = self.start_path                              # the checkpoint save this episode started from (absent: the level's own start)
+        return info
+
+    @staticmethod
+    def _start_score(start):
+        """The reward the chain had collected at a checkpoint save (its json 'score'): runs from that save add it, so scores before and after a checkpoint compare."""
+        if not start or not Path(start).with_suffix(".json").exists():
+            return 0.0
+        return float(json.loads(Path(start).with_suffix(".json").read_text()).get("score", 0.0))
+
+    def _checkpoint_start(self):
+        """The save the current checkpoint names (current.txt in checkpoint_dir), None before the first checkpoint."""
+        if not self.cfg.checkpoint_dir:
+            return None
+        pointer = Path(self.cfg.checkpoint_dir) / "current.txt"
+        if not pointer.exists():
+            return None
+        path = pointer.read_text().strip()
+        return path if path and Path(path).exists() else None
+
+    def _checkpoint(self):
+        """checkpoints: standing on the ground at one of the listed x (and high enough) saves the game as a candidate; train() picks the first one of the generation."""
+        cfg, st = self.cfg, self.state
+        if not cfg.checkpoint_dir or not (cfg.checkpoints or cfg.checkpoint_every):
+            return
+        if st.in_air or st.dying or st.pipe_timer > 0 or not st.in_level:
+            return
+        if cfg.checkpoint_every > 0:                                     # every n * checkpoint_every: standing at or past it, any y
+            n = int(st.x // cfg.checkpoint_every)
+            if n >= 1 and n > self._cp_next:
+                self._save_candidate(n, n * cfg.checkpoint_every)
+            return
+        if self._cp_next >= len(cfg.checkpoints) or st.y >= cfg.checkpoint_max_y:
+            return
+        for j in range(self._cp_next, len(cfg.checkpoints)):
+            cx = cfg.checkpoints[j]
+            if abs(st.x - cx) <= cfg.checkpoint_tol:
+                self._save_candidate(j + 1, cx)
+                return
+
+    def _save_candidate(self, number, cx):
+        """The game as it is now (and the input that led here from this episode's start) as a candidate for checkpoint `number`."""
+        cand = Path(self.cfg.checkpoint_dir) / "cand"
+        cand.mkdir(parents=True, exist_ok=True)
+        self._cp_n += 1
+        stem = cand / f"cand_{number:02d}_x{cx}_f{self.frames:07d}_{os.getpid()}_{self._cp_n}"
+        stem.with_suffix(".state").write_bytes(self._env.unwrapped.em.get_state())
+        stem.with_suffix(".json").write_text(json.dumps({"start": self.start_path, "trace": self._trace, "score": self.base + self._total}))
+        self._cp_next = number
+        self.new_cands.append(stem)
+        self.events.append([self.frames, "checkpoint", self.state.x, self.state.y])
 
     def _wall_ahead(self):
         """A hard (not pass-through) tile just past Mario's right edge, at his lower body: he is standing against a wall."""
@@ -345,6 +436,9 @@ class SmwEnv(gym.Env):
     def step(self, action):
         if self.cfg.cancel_opposites:
             action = cancel_opposites(action)
+        if self.cfg.no_spin:
+            action = np.array(action, dtype=bool)
+            action[BUTTONS.index("A")] = False
         action = self._last_chance(action)
         pad = np.zeros(12, dtype=np.int8)
         for i, on in enumerate(action):
@@ -352,7 +446,7 @@ class SmwEnv(gym.Env):
                 pad[self._pad[i]] = 1
         prev = self.state
         for _ in range(self.cfg.frame_skip):
-            self.frame = self._env.step(pad)[0]
+            self.frame = self._emu(pad)
             self.frames += 1
             if self.capture is not None:          # video recording: keep every emulator frame
                 self.capture.append(self.frame.copy())
@@ -361,6 +455,7 @@ class SmwEnv(gym.Env):
         self.state, grid = self._read(prev)
         self._track_takeoff(prev, action)
         self._track_room(prev)
+        self._checkpoint()
         rc = self.cfg.reward
         reward = -rc.time_penalty * self.cfg.frame_skip
         reward += self._opportunity(prev)
@@ -427,6 +522,7 @@ class SmwEnv(gym.Env):
             info["takeoff"] = [t["x"], t["y"], t["mask"], t["hold"], t["run"]]      # the jump (or walk off a ledge) that ended in death
         if terminated or truncated:
             info["events"] = list(self.events)      # [frame, kind, x, y] for the path map
+        self._total += float(reward)
         return grid, float(reward), terminated, truncated, info
 
     def decide(self, out):
